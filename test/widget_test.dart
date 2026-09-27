@@ -1,6 +1,8 @@
 import 'package:chrona/app.dart';
 import 'package:chrona/models/task.dart';
+import 'package:chrona/providers/focus_provider.dart';
 import 'package:chrona/providers/task_provider.dart';
+import 'package:chrona/screens/focus/focus_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,7 +35,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
     await tester.pumpAndSettle();
-    expect(find.text('24:37'), findsOneWidget);
+    expect(find.text('25:00'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('暂停'), 240);
     await tester.tap(find.text('暂停'));
@@ -41,6 +43,9 @@ void main() {
     expect(find.text('继续'), findsOneWidget);
 
     await tester.tap(find.text('结束专注'));
+    await tester.pumpAndSettle();
+    expect(find.text('提前结束本轮专注？'), findsOneWidget);
+    await tester.tap(find.text('结束'));
     await tester.pumpAndSettle();
     expect(find.text('本轮记录'), findsOneWidget);
 
@@ -74,5 +79,83 @@ void main() {
 
     expect(find.text('新任务'), findsOneWidget);
     expect(find.text('一条备注'), findsOneWidget);
+  });
+
+  testWidgets('short focus session finishes and opens the note screen',
+      (tester) async {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FocusScreen(
+          task: const Task(
+            id: 1,
+            title: '测试任务',
+            completed: false,
+            createdAt: 1,
+          ),
+          durationSeconds: 1,
+          now: () => currentTime,
+        ),
+      ),
+    );
+    expect(find.text('00:01'), findsOneWidget);
+
+    currentTime = currentTime.add(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('本轮专注完成'), findsOneWidget);
+    expect(find.text('测试任务'), findsOneWidget);
+  });
+
+  testWidgets('pause freezes time and resume rebuilds the end timestamp',
+      (tester) async {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    final provider = FocusProvider(
+      task: const Task(
+        id: 1,
+        title: '测试任务',
+        completed: false,
+        createdAt: 1,
+      ),
+      plannedDurationSeconds: 30,
+      now: () => currentTime,
+    );
+    provider.start();
+
+    currentTime = currentTime.add(const Duration(seconds: 5));
+    provider.pause();
+    expect(provider.status, FocusTimerStatus.paused);
+    expect(provider.remainingSeconds, 25);
+    expect(provider.pausedAt, currentTime);
+    expect(provider.pausedRemainingSeconds, 25);
+
+    currentTime = currentTime.add(const Duration(seconds: 10));
+    provider.resume();
+    expect(provider.status, FocusTimerStatus.running);
+    expect(provider.pausedAt, isNull);
+    expect(provider.pausedRemainingSeconds, isNull);
+    expect(provider.endsAt?.difference(currentTime).inSeconds, 25);
+
+    provider.dispose();
+  });
+
+  testWidgets('paused focus resumes after returning to today', (tester) async {
+    await tester.pumpWidget(ChronaApp(taskProvider: createTestTaskProvider()));
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('暂停'), 240);
+    await tester.tap(find.text('暂停'));
+    await tester.pump();
+    expect(find.text('继续'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.home_filled));
+    await tester.pumpAndSettle();
+    expect(find.text('今天'), findsNWidgets(2));
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
+    await tester.pumpAndSettle();
+    expect(find.text('继续'), findsOneWidget);
   });
 }

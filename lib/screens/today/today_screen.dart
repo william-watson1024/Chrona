@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
+import '../../providers/focus_provider.dart';
 import '../../providers/task_provider.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
@@ -37,6 +38,33 @@ class _TodayScreenContent extends StatefulWidget {
 
 class _TodayScreenContentState extends State<_TodayScreenContent> {
   int _selectedTab = 0;
+  FocusProvider? _activeFocusProvider;
+
+  @override
+  void dispose() {
+    _activeFocusProvider?.dispose();
+    super.dispose();
+  }
+
+  void _openFocus(Task task) {
+    final activeProvider = _activeFocusProvider;
+    final canResume = activeProvider != null &&
+        activeProvider.task.id == task.id &&
+        (activeProvider.isRunning || activeProvider.isPaused);
+    if (!canResume) {
+      activeProvider?.dispose();
+      _activeFocusProvider = FocusProvider(task: task);
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FocusScreen(
+          task: task,
+          focusProvider: _activeFocusProvider,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +73,12 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
         bottom: false,
         child: Column(
           children: [
-            Expanded(child: _TodayTabContent(selectedTab: _selectedTab)),
+            Expanded(
+              child: _TodayTabContent(
+                selectedTab: _selectedTab,
+                onStartFocus: _openFocus,
+              ),
+            ),
             ChronaBottomNavigation(
               selectedIndex: _selectedTab,
               onTabSelected: (index) {
@@ -66,21 +99,27 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
 }
 
 class _TodayTabContent extends StatelessWidget {
-  const _TodayTabContent({required this.selectedTab});
+  const _TodayTabContent({
+    required this.selectedTab,
+    required this.onStartFocus,
+  });
 
   final int selectedTab;
+  final ValueChanged<Task> onStartFocus;
 
   @override
   Widget build(BuildContext context) {
     if (selectedTab != 0) {
       return _PlaceholderTab(title: selectedTab == 1 ? '记录' : '设置');
     }
-    return const _TodayHomeContent();
+    return _TodayHomeContent(onStartFocus: onStartFocus);
   }
 }
 
 class _TodayHomeContent extends StatelessWidget {
-  const _TodayHomeContent();
+  const _TodayHomeContent({required this.onStartFocus});
+
+  final ValueChanged<Task> onStartFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +159,7 @@ class _TodayHomeContent extends StatelessWidget {
                     task: task,
                     onToggle: () => taskProvider.toggleTask(task),
                     onDelete: () => _confirmDelete(context, task),
-                    onStart: task.completed
-                        ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => FocusScreen(task: task),
-                              ),
-                            ),
+                    onStart: task.completed ? null : () => onStartFocus(task),
                   ),
               ],
             ),

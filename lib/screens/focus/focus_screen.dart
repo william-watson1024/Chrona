@@ -1,114 +1,233 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
+import '../../providers/focus_provider.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 import 'focus_note_screen.dart';
 
 class FocusScreen extends StatefulWidget {
-  const FocusScreen({super.key, required this.task});
+  const FocusScreen({
+    super.key,
+    required this.task,
+    this.durationSeconds = FocusTimerDurations.pomodoro,
+    this.now,
+    this.focusProvider,
+  });
 
   final Task task;
+  final int durationSeconds;
+  final DateTime Function()? now;
+  final FocusProvider? focusProvider;
 
   @override
   State<FocusScreen> createState() => _FocusScreenState();
 }
 
 class _FocusScreenState extends State<FocusScreen> {
-  bool _isPaused = false;
+  late final FocusProvider _focusProvider;
+  late final bool _ownsFocusProvider;
+  bool _hasOpenedNote = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsFocusProvider = widget.focusProvider == null;
+    _focusProvider = widget.focusProvider ??
+        FocusProvider(
+          task: widget.task,
+          plannedDurationSeconds: widget.durationSeconds,
+          now: widget.now,
+        );
+    _focusProvider.addListener(_handleFocusChanged);
+    if (_focusProvider.status == FocusTimerStatus.idle) {
+      _focusProvider.start();
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusProvider.removeListener(_handleFocusChanged);
+    if (_ownsFocusProvider) _focusProvider.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChanged() {
+    final status = _focusProvider.status;
+    if (_hasOpenedNote ||
+        (status != FocusTimerStatus.finished &&
+            status != FocusTimerStatus.cancelled)) {
+      return;
+    }
+
+    _hasOpenedNote = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FocusNoteScreen(
+            session: _focusProvider.sessionResult,
+          ),
+        ),
+      );
+    });
+  }
+
+  Future<void> _confirmEnd() async {
+    final shouldEnd = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('提前结束本轮专注？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('继续专注'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF111111),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('结束'),
+          ),
+        ],
+      ),
+    );
+    if (shouldEnd == true && mounted) _focusProvider.cancel();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-                child: Column(
-                  children: [
-                    _FocusTopBar(onBack: () => Navigator.of(context).pop()),
-                    const SizedBox(height: 48),
-                    Text(
-                      widget.task.title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF111111),
-                        fontSize: 31,
-                        height: 1.2,
-                        fontWeight: FontWeight.w500,
+    return ChangeNotifierProvider.value(
+      value: _focusProvider,
+      child: Consumer<FocusProvider>(
+        builder: (context, provider, child) {
+          return Scaffold(
+            body: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+                      child: Column(
+                        children: [
+                          _FocusTopBar(
+                            onBack: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(height: 48),
+                          Text(
+                            provider.task.title,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFF111111),
+                              fontSize: 31,
+                              height: 1.2,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 13),
+                          if (provider.task.note?.isNotEmpty == true)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.notes_outlined,
+                                  size: 21,
+                                  color: Color(0xFF858585),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    provider.task.note!,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Color(0xFF858585),
+                                      fontSize: 20,
+                                      height: 1.15,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 64),
+                          _FocusProgress(
+                            remainingSeconds: provider.remainingSeconds,
+                            plannedDurationSeconds:
+                                provider.plannedDurationSeconds,
+                            status: provider.status,
+                          ),
+                          const SizedBox(height: 58),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 520),
+                            child: PrimaryButton(
+                              label: provider.isPaused ? '继续' : '暂停',
+                              onPressed: provider.isPaused
+                                  ? provider.resume
+                                  : provider.pause,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          TextButton(
+                            onPressed: _confirmEnd,
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF111111),
+                            ),
+                            child: const Text(
+                              '结束专注',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 48),
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 22,
+                                color: Color(0xFF8B8B8B),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                '时间结束后将通过震动提醒',
+                                style: TextStyle(
+                                  color: Color(0xFF8B8B8B),
+                                  fontSize: 17,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 13),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.notes_outlined,
-                            size: 21, color: Color(0xFF858585)),
-                        const SizedBox(width: 8),
-                        Text(
-                          widget.task.note ?? '',
-                          style: const TextStyle(
-                              color: Color(0xFF858585),
-                              fontSize: 20,
-                              height: 1.15),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 64),
-                    const _FocusProgress(),
-                    const SizedBox(height: 58),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 520),
-                      child: PrimaryButton(
-                        label: _isPaused ? '继续' : '暂停',
-                        onPressed: () => setState(() => _isPaused = !_isPaused),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => FocusNoteScreen(task: widget.task)),
-                      ),
-                      style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF111111)),
-                      child: const Text('结束专注',
-                          style: TextStyle(
-                              fontSize: 21, fontWeight: FontWeight.w500)),
-                    ),
-                    const SizedBox(height: 48),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.info_outline,
-                            size: 22, color: Color(0xFF8B8B8B)),
-                        SizedBox(width: 10),
-                        Text('时间结束后将通过震动提醒',
-                            style: TextStyle(
-                                color: Color(0xFF8B8B8B), fontSize: 17)),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                  ChronaBottomNavigation(
+                    selectedIndex: 0,
+                    onTabSelected: (index) {
+                      if (index == 0) {
+                        Navigator.of(context).pop();
+                      } else if (index == 1) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const HistoryScreen(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom),
+                ],
               ),
             ),
-            ChronaBottomNavigation(
-              selectedIndex: 0,
-              onTabSelected: (index) {
-                if (index == 0) {
-                  Navigator.of(context).pop();
-                } else if (index == 1) {
-                  Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const HistoryScreen()));
-                }
-              },
-            ),
-            SizedBox(height: MediaQuery.paddingOf(context).bottom),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -144,11 +263,29 @@ class _FocusTopBar extends StatelessWidget {
 }
 
 class _FocusProgress extends StatelessWidget {
-  const _FocusProgress();
+  const _FocusProgress({
+    required this.remainingSeconds,
+    required this.plannedDurationSeconds,
+    required this.status,
+  });
+
+  final int remainingSeconds;
+  final int plannedDurationSeconds;
+  final FocusTimerStatus status;
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    final progress = plannedDurationSeconds == 0
+        ? 1.0
+        : (1 - remainingSeconds / plannedDurationSeconds).clamp(0.0, 1.0);
+    final statusLabel = switch (status) {
+      FocusTimerStatus.paused => '已暂停',
+      FocusTimerStatus.finished => '已完成',
+      FocusTimerStatus.cancelled => '已结束',
+      _ => '专注中',
+    };
+
+    return SizedBox(
       width: 306,
       height: 306,
       child: Stack(
@@ -158,30 +295,46 @@ class _FocusProgress extends StatelessWidget {
             width: 306,
             height: 306,
             child: CircularProgressIndicator(
-              value: 0.68,
+              value: progress,
               strokeWidth: 9,
-              backgroundColor: Color(0xFFF0F0F0),
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF111111)),
+              backgroundColor: const Color(0xFFF0F0F0),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF111111),
+              ),
             ),
           ),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('24:37',
-                  style: TextStyle(
-                      color: Color(0xFF111111),
-                      fontSize: 70,
-                      height: 1,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: 1)),
-              SizedBox(height: 16),
-              Text('专注中',
-                  style: TextStyle(
-                      color: Color(0xFF8B8B8B), fontSize: 22, height: 1.1)),
+              Text(
+                _formatRemaining(remainingSeconds),
+                style: const TextStyle(
+                  color: Color(0xFF111111),
+                  fontSize: 70,
+                  height: 1,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                statusLabel,
+                style: const TextStyle(
+                  color: Color(0xFF8B8B8B),
+                  fontSize: 22,
+                  height: 1.1,
+                ),
+              ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  String _formatRemaining(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remaining = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remaining.toString().padLeft(2, '0')}';
   }
 }

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../data/mock_data.dart';
-import '../../models/task.dart';
+import '../../providers/focus_provider.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 
 class FocusNoteScreen extends StatefulWidget {
-  const FocusNoteScreen({super.key, required this.task});
+  const FocusNoteScreen({super.key, required this.session});
 
-  final Task task;
+  final FocusSessionResult session;
 
   @override
   State<FocusNoteScreen> createState() => _FocusNoteScreenState();
@@ -44,9 +44,11 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                   children: [
                     _NoteTopBar(onBack: () => Navigator.of(context).pop()),
                     const SizedBox(height: 72),
-                    const Text(
-                      '本轮专注完成',
-                      style: TextStyle(
+                    Text(
+                      widget.session.status == FocusTimerStatus.cancelled
+                          ? '本轮专注结束'
+                          : '本轮专注完成',
+                      style: const TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 34,
                           height: 1.1,
@@ -54,7 +56,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                     ),
                     const SizedBox(height: 43),
                     Text(
-                      widget.task.title,
+                      widget.session.task.title,
                       style: const TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 30,
@@ -62,11 +64,24 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                           fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      '${ChronaMockData.focusTime} · ${ChronaMockData.focusDuration}',
-                      style: TextStyle(
+                    Text(
+                      '${_formatTime(widget.session.startedAt)} - '
+                      '${_formatTime(widget.session.endedAt)} · '
+                      '${_formatDuration(widget.session.actualDurationSeconds)}',
+                      style: const TextStyle(
                           color: Color(0xFF8B8B8B), fontSize: 20, height: 1.1),
                     ),
+                    if (widget.session.status ==
+                        FocusTimerStatus.cancelled) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        '提前结束',
+                        style: TextStyle(
+                            color: Color(0xFF8B8B8B),
+                            fontSize: 16,
+                            height: 1.1),
+                      ),
+                    ],
                     const SizedBox(height: 79),
                     const Text(
                       '这段时间做了什么？',
@@ -126,6 +141,17 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    if (minutes > 0) return '$minutes min';
+    return '$seconds sec';
   }
 }
 
