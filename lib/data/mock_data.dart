@@ -6,42 +6,6 @@ abstract final class ChronaMockData {
   static const focusNote =
       '看完 Introduction 和 Section 2，\n整理了 Continuous Batching 笔记。';
 
-  static List<TodoTask> createTodayTasks() => [
-        TodoTask(
-          id: 'orca',
-          title: currentTaskTitle,
-          note: currentTaskNote,
-          focusMinutes: 25,
-        ),
-        TodoTask(
-          id: 'ragforge',
-          title: '写 RagForge',
-          note: '实现文档解析接口',
-          focusMinutes: 50,
-        ),
-        TodoTask(
-          id: 'homework',
-          title: '上课作业',
-          note: '完成第二题',
-          focusMinutes: 25,
-          isCompleted: true,
-        ),
-        TodoTask(id: 'workout', title: '健身', note: '胸 + 肩', focusMinutes: 50),
-        TodoTask(
-          id: 'notes',
-          title: '整理笔记',
-          note: 'SGLang 阅读笔记',
-          focusMinutes: 25,
-        ),
-        TodoTask(
-          id: 'sharing',
-          title: '看技术分享',
-          note: 'AI Infra 系列',
-          focusMinutes: 50,
-          isCompleted: true,
-        ),
-      ];
-
   static const historyGroups = <HistoryGroupMockData>[
     HistoryGroupMockData(
       label: '今天',
@@ -81,22 +45,6 @@ abstract final class ChronaMockData {
       ],
     ),
   ];
-}
-
-class TodoTask {
-  TodoTask({
-    required this.id,
-    required this.title,
-    required this.note,
-    required this.focusMinutes,
-    this.isCompleted = false,
-  });
-
-  final String id;
-  final String title;
-  final String note;
-  final int focusMinutes;
-  bool isCompleted;
 }
 
 class HistoryGroupMockData {

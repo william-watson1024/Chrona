@@ -1,0 +1,93 @@
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+
+import '../models/task.dart';
+
+class AppDatabase {
+  AppDatabase._();
+
+  static final AppDatabase instance = AppDatabase._();
+
+  Database? _database;
+
+  Future<Database> get database async {
+    final current = _database;
+    if (current != null) return current;
+
+    final databaseDirectory = await getDatabasesPath();
+    final databasePath = join(databaseDirectory, 'chrona.db');
+    _database = await openDatabase(
+      databasePath,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE task (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            note TEXT,
+            completed INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            completed_at INTEGER
+          )
+        ''');
+
+        await _insertInitialTasks(db);
+      },
+    );
+    return _database!;
+  }
+
+  Future<List<Task>> loadTasks() async {
+    final db = await database;
+    final rows = await db.query(
+      'task',
+      orderBy: 'completed ASC, created_at DESC',
+    );
+    return rows.map(Task.fromMap).toList();
+  }
+
+  Future<Task> insertTask(Task task) async {
+    final db = await database;
+    final id = await db.insert('task', task.toMap()..remove('id'));
+    return task.copyWith(id: id);
+  }
+
+  Future<void> updateTask(Task task) async {
+    final id = task.id;
+    if (id == null) return;
+
+    final db = await database;
+    await db.update('task', task.toMap()..remove('id'),
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteTask(Task task) async {
+    final id = task.id;
+    if (id == null) return;
+
+    final db = await database;
+    await db.delete('task', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> _insertInitialTasks(Database db) async {
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    final initialTasks = [
+      {'title': '阅读 Orca 论文', 'note': '继续看 Section 3', 'completed': 0},
+      {'title': '写 RagForge', 'note': '实现文档解析接口', 'completed': 0},
+      {'title': '上课作业', 'note': '完成第二题', 'completed': 1},
+      {'title': '健身', 'note': '胸 + 肩', 'completed': 0},
+      {'title': '整理笔记', 'note': 'SGLang 阅读笔记', 'completed': 0},
+      {'title': '看技术分享', 'note': 'AI Infra 系列', 'completed': 1},
+    ];
+
+    for (var index = 0; index < initialTasks.length; index++) {
+      final initialTask = initialTasks[index];
+      await db.insert('task', {
+        ...initialTask,
+        'created_at': createdAt - index,
+        'completed_at':
+            initialTask['completed'] == 1 ? createdAt - index : null,
+      });
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../data/mock_data.dart';
+import '../../models/task.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 import 'focus_note_screen.dart';
@@ -8,7 +8,7 @@ import 'focus_note_screen.dart';
 class FocusScreen extends StatefulWidget {
   const FocusScreen({super.key, required this.task});
 
-  final TodoTask task;
+  final Task task;
 
   @override
   State<FocusScreen> createState() => _FocusScreenState();
@@ -49,7 +49,7 @@ class _FocusScreenState extends State<FocusScreen> {
                             size: 21, color: Color(0xFF858585)),
                         const SizedBox(width: 8),
                         Text(
-                          widget.task.note,
+                          widget.task.note ?? '',
                           style: const TextStyle(
                               color: Color(0xFF858585),
                               fontSize: 20,

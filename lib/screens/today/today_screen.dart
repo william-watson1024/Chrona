@@ -1,59 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/mock_data.dart';
+import '../../models/task.dart';
+import '../../providers/task_provider.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
 import '../../widgets/chrona_widgets.dart';
 
-class TodayViewModel extends ChangeNotifier {
-  TodayViewModel() : _tasks = ChronaMockData.createTodayTasks();
-
-  final List<TodoTask> _tasks;
-  int _selectedTab = 0;
-
-  List<TodoTask> get tasks => List.unmodifiable(_tasks);
-  int get selectedTab => _selectedTab;
-  int get completedCount => _tasks.where((task) => task.isCompleted).length;
-
-  void toggleTask(TodoTask task) {
-    task.isCompleted = !task.isCompleted;
-    notifyListeners();
-  }
-
-  void addTask(String title) {
-    final trimmedTitle = title.trim();
-    if (trimmedTitle.isEmpty) return;
-    _tasks.add(TodoTask(
-      id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
-      title: trimmedTitle,
-      note: '待补充',
-      focusMinutes: 25,
-    ));
-    notifyListeners();
-  }
-
-  void selectTab(int index) {
-    if (_selectedTab == index) return;
-    _selectedTab = index;
-    notifyListeners();
-  }
-}
-
 class TodayScreen extends StatelessWidget {
-  const TodayScreen({super.key});
+  const TodayScreen({super.key, this.taskProvider});
+
+  final TaskProvider? taskProvider;
 
   @override
   Widget build(BuildContext context) {
+    if (taskProvider != null) {
+      return ChangeNotifierProvider.value(
+        value: taskProvider!,
+        child: const _TodayScreenContent(),
+      );
+    }
+
     return ChangeNotifierProvider(
-      create: (_) => TodayViewModel(),
+      create: (_) => TaskProvider()..loadTasks(),
       child: const _TodayScreenContent(),
     );
   }
 }
 
-class _TodayScreenContent extends StatelessWidget {
+class _TodayScreenContent extends StatefulWidget {
   const _TodayScreenContent();
+
+  @override
+  State<_TodayScreenContent> createState() => _TodayScreenContentState();
+}
+
+class _TodayScreenContentState extends State<_TodayScreenContent> {
+  int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -62,16 +45,16 @@ class _TodayScreenContent extends StatelessWidget {
         bottom: false,
         child: Column(
           children: [
-            const Expanded(child: _TodayTabContent()),
+            Expanded(child: _TodayTabContent(selectedTab: _selectedTab)),
             ChronaBottomNavigation(
-              selectedIndex: context.watch<TodayViewModel>().selectedTab,
+              selectedIndex: _selectedTab,
               onTabSelected: (index) {
                 if (index == 1) {
                   Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const HistoryScreen()));
                   return;
                 }
-                context.read<TodayViewModel>().selectTab(index);
+                setState(() => _selectedTab = index);
               },
             ),
             SizedBox(height: MediaQuery.paddingOf(context).bottom),
@@ -83,19 +66,16 @@ class _TodayScreenContent extends StatelessWidget {
 }
 
 class _TodayTabContent extends StatelessWidget {
-  const _TodayTabContent();
+  const _TodayTabContent({required this.selectedTab});
+
+  final int selectedTab;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<TodayViewModel>(
-      builder: (context, viewModel, child) {
-        if (viewModel.selectedTab != 0) {
-          return _PlaceholderTab(
-              title: viewModel.selectedTab == 1 ? '记录' : '设置');
-        }
-        return const _TodayHomeContent();
-      },
-    );
+    if (selectedTab != 0) {
+      return _PlaceholderTab(title: selectedTab == 1 ? '记录' : '设置');
+    }
+    return const _TodayHomeContent();
   }
 }
 
@@ -104,7 +84,16 @@ class _TodayHomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<TodayViewModel>();
+    final taskProvider = context.watch<TaskProvider>();
+    if (taskProvider.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 1.5,
+          color: Color(0xFF111111),
+        ),
+      );
+    }
+
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
@@ -115,7 +104,7 @@ class _TodayHomeContent extends StatelessWidget {
               children: [
                 const BrandHeader(),
                 const SizedBox(height: 48),
-                _TodaySummary(completedCount: viewModel.completedCount),
+                _TodaySummary(completedCount: taskProvider.completedCount),
                 const SizedBox(height: 27),
               ],
             ),
@@ -126,11 +115,12 @@ class _TodayHomeContent extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
-                for (final task in viewModel.tasks)
+                for (final task in taskProvider.tasks)
                   _TaskRow(
                     task: task,
-                    onToggle: () => viewModel.toggleTask(task),
-                    onStart: task.isCompleted
+                    onToggle: () => taskProvider.toggleTask(task),
+                    onDelete: () => _confirmDelete(context, task),
+                    onStart: task.completed
                         ? null
                         : () => Navigator.of(context).push(
                               MaterialPageRoute(
@@ -157,43 +147,43 @@ class _TodayHomeContent extends StatelessWidget {
   }
 
   Future<void> _showAddTaskDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
+    final draft = await showDialog<_TaskDraft>(
+      context: context,
+      builder: (dialogContext) => const _AddTaskDialog(),
+    );
+    if (draft != null && context.mounted) {
+      await context.read<TaskProvider>().addTask(
+            title: draft.title,
+            note: draft.note,
+          );
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Task task) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        title: const Text('添加任务'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            hintText: '输入任务名称',
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFFDDDDDD))),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF111111))),
-          ),
-          onSubmitted: (_) => Navigator.of(dialogContext).pop(controller.text),
-        ),
+        title: Text('删除「${task.title}」？'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消')),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF111111),
-                foregroundColor: Colors.white),
-            child: const Text('添加'),
+              backgroundColor: const Color(0xFF111111),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('删除'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (title != null && context.mounted) {
-      context.read<TodayViewModel>().addTask(title);
+    if (confirmed == true && context.mounted) {
+      await context.read<TaskProvider>().deleteTask(task);
     }
   }
 }
@@ -244,6 +234,112 @@ class _TodaySummary extends StatelessWidget {
   }
 }
 
+class _TaskDraft {
+  const _TaskDraft({required this.title, required this.note});
+
+  final String title;
+  final String note;
+}
+
+class _AddTaskDialog extends StatefulWidget {
+  const _AddTaskDialog();
+
+  @override
+  State<_AddTaskDialog> createState() => _AddTaskDialogState();
+}
+
+class _AddTaskDialogState extends State<_AddTaskDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _noteController;
+  String? _titleError;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _noteController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      title: const Text('添加任务'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _titleController,
+            autofocus: true,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: '标题',
+              hintText: '输入任务名称',
+              errorText: _titleError,
+              enabledBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+              ),
+              focusedBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF111111)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _noteController,
+            maxLines: 2,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: '备注（可选）',
+              hintText: '补充一点说明',
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF111111)),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final title = _titleController.text.trim();
+            if (title.isEmpty) {
+              setState(() => _titleError = '标题不能为空');
+              return;
+            }
+            Navigator.of(context).pop(
+              _TaskDraft(
+                title: title,
+                note: _noteController.text,
+              ),
+            );
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF111111),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('添加'),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatBlock extends StatelessWidget {
   const _StatBlock({required this.value, required this.label});
 
@@ -271,18 +367,23 @@ class _StatBlock extends StatelessWidget {
 }
 
 class _TaskRow extends StatelessWidget {
-  const _TaskRow(
-      {required this.task, required this.onToggle, required this.onStart});
+  const _TaskRow({
+    required this.task,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onStart,
+  });
 
-  final TodoTask task;
+  final Task task;
   final VoidCallback onToggle;
+  final VoidCallback onDelete;
   final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context) {
-    final textDecoration = task.isCompleted ? TextDecoration.lineThrough : null;
+    final textDecoration = task.completed ? TextDecoration.lineThrough : null;
     final contentColor =
-        task.isCompleted ? const Color(0xFF6F6F6F) : const Color(0xFF111111);
+        task.completed ? const Color(0xFF6F6F6F) : const Color(0xFF111111);
     return Container(
       constraints: const BoxConstraints(minHeight: 94),
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -292,11 +393,11 @@ class _TaskRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _CompletionButton(completed: task.isCompleted, onPressed: onToggle),
+          _CompletionButton(completed: task.completed, onPressed: onToggle),
           const SizedBox(width: 17),
           Expanded(
             child: Opacity(
-              opacity: task.isCompleted ? 0.65 : 1,
+              opacity: task.completed ? 0.65 : 1,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -317,7 +418,7 @@ class _TaskRow extends StatelessWidget {
                           size: 18, color: Color(0xFF8A8A8A)),
                       const SizedBox(width: 7),
                       Flexible(
-                          child: Text(task.note,
+                          child: Text(task.note ?? '',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -332,16 +433,30 @@ class _TaskRow extends StatelessWidget {
           ),
           const SizedBox(width: 9),
           Opacity(
-              opacity: task.isCompleted ? 0.65 : 1,
-              child: Text('${task.focusMinutes} min',
+              opacity: task.completed ? 0.65 : 1,
+              child: Text(_mockFocusDuration(task),
                   style: const TextStyle(
                       color: Color(0xFF858585), fontSize: 16, height: 1.1))),
           const SizedBox(width: 17),
+          IconButton(
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline, size: 20),
+            color: const Color(0xFF8A8A8A),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            tooltip: '删除任务',
+          ),
           _StartButton(onPressed: onStart),
         ],
       ),
     );
   }
+}
+
+String _mockFocusDuration(Task task) {
+  const fiftyMinuteTasks = {'写 RagForge', '健身', '看技术分享'};
+  return fiftyMinuteTasks.contains(task.title) ? '50 min' : '25 min';
 }
 
 class _CompletionButton extends StatelessWidget {

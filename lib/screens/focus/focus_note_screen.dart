@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../data/mock_data.dart';
+import '../../models/task.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 
 class FocusNoteScreen extends StatefulWidget {
   const FocusNoteScreen({super.key, required this.task});
 
-  final TodoTask task;
+  final Task task;
 
   @override
   State<FocusNoteScreen> createState() => _FocusNoteScreenState();
