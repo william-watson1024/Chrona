@@ -7,6 +7,7 @@ import '../../providers/focus_provider.dart';
 import '../../providers/task_provider.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
+import '../settings/settings_screen.dart';
 import '../../widgets/chrona_widgets.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -112,6 +113,12 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
                 if (index == 1) {
                   Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const HistoryScreen()));
+                  return;
+                }
+                if (index == 2) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
                   return;
                 }
                 setState(() => _selectedTab = index);

@@ -13,12 +13,16 @@ class FocusScreen extends StatefulWidget {
     super.key,
     required this.task,
     this.durationSeconds = FocusTimerDurations.pomodoro,
+    this.mode = FocusMode.focus,
+    this.nextFocusDurationSeconds,
     this.now,
     this.focusProvider,
   });
 
   final Task task;
   final int durationSeconds;
+  final FocusMode mode;
+  final int? nextFocusDurationSeconds;
   final DateTime Function()? now;
   final FocusProvider? focusProvider;
 
@@ -39,6 +43,7 @@ class _FocusScreenState extends State<FocusScreen> {
         FocusProvider(
           task: widget.task,
           plannedDurationSeconds: widget.durationSeconds,
+          mode: widget.mode,
           now: widget.now,
         );
     _focusProvider.addListener(_handleFocusChanged);
@@ -62,7 +67,8 @@ class _FocusScreenState extends State<FocusScreen> {
 
   void _handleFocusChanged() {
     final status = _focusProvider.status;
-    if (_hasOpenedNote ||
+    if (widget.mode == FocusMode.rest ||
+        _hasOpenedNote ||
         (status != FocusTimerStatus.finished &&
             status != FocusTimerStatus.cancelled)) {
       return;
@@ -79,6 +85,24 @@ class _FocusScreenState extends State<FocusScreen> {
         ),
       );
     });
+  }
+
+  void _startNextFocus() {
+    final nextDuration =
+        widget.nextFocusDurationSeconds ?? FocusTimerDurations.pomodoro;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => FocusScreen(
+          task: widget.task,
+          durationSeconds: nextDuration,
+          mode: FocusMode.focus,
+        ),
+      ),
+    );
+  }
+
+  void _skipBreak() {
+    _focusProvider.skipBreak();
   }
 
   Future<void> _confirmEnd() async {
@@ -113,6 +137,9 @@ class _FocusScreenState extends State<FocusScreen> {
       value: _focusProvider,
       child: Consumer<FocusProvider>(
         builder: (context, provider, child) {
+          final isBreak = provider.mode == FocusMode.rest;
+          final isBreakReady =
+              isBreak && provider.status == FocusTimerStatus.finished;
           return Scaffold(
             body: SafeArea(
               bottom: false,
@@ -128,7 +155,7 @@ class _FocusScreenState extends State<FocusScreen> {
                           ),
                           const SizedBox(height: 48),
                           Text(
-                            provider.task.title,
+                            isBreak ? '休息一下' : provider.task.title,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Color(0xFF111111),
@@ -138,7 +165,8 @@ class _FocusScreenState extends State<FocusScreen> {
                             ),
                           ),
                           const SizedBox(height: 13),
-                          if (provider.task.note?.isNotEmpty == true)
+                          if (!isBreak &&
+                              provider.task.note?.isNotEmpty == true)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -162,6 +190,17 @@ class _FocusScreenState extends State<FocusScreen> {
                               ],
                             ),
                           const SizedBox(height: 64),
+                          if (isBreak) ...[
+                            const Text(
+                              '短休息',
+                              style: TextStyle(
+                                color: Color(0xFF858585),
+                                fontSize: 20,
+                                height: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                           _FocusProgress(
                             remainingSeconds: provider.remainingSeconds,
                             plannedDurationSeconds:
@@ -169,50 +208,80 @@ class _FocusScreenState extends State<FocusScreen> {
                             status: provider.status,
                           ),
                           const SizedBox(height: 58),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 520),
-                            child: PrimaryButton(
-                              label: provider.isPaused ? '继续' : '暂停',
-                              onPressed: provider.isPaused
-                                  ? provider.resume
-                                  : provider.pause,
+                          if (isBreakReady) ...[
+                            const Text(
+                              '准备开始下一轮',
+                              style: TextStyle(
+                                color: Color(0xFF858585),
+                                fontSize: 20,
+                                height: 1.1,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          if (provider.status == FocusTimerStatus.finished)
+                            const SizedBox(height: 24),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 520),
+                              child: PrimaryButton(
+                                label: '开始专注',
+                                onPressed: _startNextFocus,
+                              ),
+                            ),
+                          ] else ...[
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 520),
+                              child: PrimaryButton(
+                                label: provider.isPaused ? '继续' : '暂停',
+                                onPressed: provider.isPaused
+                                    ? provider.resume
+                                    : provider.pause,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                          if (isBreak && !isBreakReady)
+                            TextButton(
+                              onPressed: _skipBreak,
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF111111),
+                              ),
+                              child: const Text('跳过休息'),
+                            ),
+                          if (!isBreak &&
+                              provider.status == FocusTimerStatus.finished)
                             TextButton(
                               onPressed: () =>
                                   NotificationService.instance.cancelFocusEnd(),
                               child: const Text('停止提醒'),
                             ),
-                          if (provider.status == FocusTimerStatus.finished)
+                          if (!isBreak &&
+                              provider.status == FocusTimerStatus.finished)
                             const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: _confirmEnd,
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF111111),
-                            ),
-                            child: const Text(
-                              '结束专注',
-                              style: TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.w500,
+                          if (!isBreak)
+                            TextButton(
+                              onPressed: _confirmEnd,
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF111111),
+                              ),
+                              child: const Text(
+                                '结束专注',
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                          ),
                           const SizedBox(height: 48),
-                          const Row(
+                          Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.info_outline,
                                 size: 22,
                                 color: Color(0xFF8B8B8B),
                               ),
-                              SizedBox(width: 10),
+                              const SizedBox(width: 10),
                               Text(
-                                '时间结束后将通过震动提醒',
-                                style: TextStyle(
+                                isBreak ? '休息结束后将响铃并震动' : '时间结束后将通过震动提醒',
+                                style: const TextStyle(
                                   color: Color(0xFF8B8B8B),
                                   fontSize: 17,
                                 ),

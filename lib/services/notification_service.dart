@@ -3,7 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-/// Owns the single local-notification channel used by focus sessions.
+/// Owns the local-notification channels used by focus and break sessions.
 ///
 /// There is intentionally only one notification id: CHRONA has one active
 /// focus session at a time, and reusing the id makes replacing an old
@@ -17,7 +17,8 @@ class NotificationService {
   // Android channel sound/vibration settings are immutable after creation.
   // Use a new channel id so existing silent installations receive the alert
   // configuration without any native bridge or extra vibration plugin.
-  static const String focusChannelId = 'chrona_focus_alerts_v2';
+  static const String focusChannelId = 'chrona_focus_alerts_v3';
+  static const String breakChannelId = 'chrona_break_alerts_v1';
   static const String _stopReminderActionId = 'stop_focus_reminder';
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -60,6 +61,17 @@ class NotificationService {
           focusChannelId,
           '专注完成提醒',
           description: 'CHRONA 番茄钟完成提醒',
+          importance: Importance.high,
+          playSound: false,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
+        ),
+      );
+      await android?.createNotificationChannel(
+        AndroidNotificationChannel(
+          breakChannelId,
+          '休息结束提醒',
+          description: 'CHRONA 休息结束提醒',
           importance: Importance.high,
           playSound: true,
           enableVibration: true,
@@ -106,6 +118,38 @@ class NotificationService {
     required String taskTitle,
     required int plannedDurationSeconds,
   }) {
+    return _scheduleEnd(
+      channelId: focusChannelId,
+      title: '专注完成',
+      body: (durationLabel) => '$taskTitle\n本轮 $durationLabel 已结束',
+      endsAt: endsAt,
+      plannedDurationSeconds: plannedDurationSeconds,
+      playSound: false,
+      payload: 'focus_finished',
+    );
+  }
+
+  Future<void> scheduleBreakEnd({required DateTime endsAt}) {
+    return _scheduleEnd(
+      channelId: breakChannelId,
+      title: '休息结束',
+      body: (_) => '准备开始下一轮专注',
+      endsAt: endsAt,
+      plannedDurationSeconds: null,
+      playSound: true,
+      payload: 'break_finished',
+    );
+  }
+
+  Future<void> _scheduleEnd({
+    required String channelId,
+    required String title,
+    required String Function(String durationLabel) body,
+    required DateTime endsAt,
+    required int? plannedDurationSeconds,
+    required bool playSound,
+    required String payload,
+  }) {
     return _enqueue(() async {
       await initialize();
       if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
@@ -119,15 +163,17 @@ class NotificationService {
       // caller starts a new session after an earlier one has ended.
       await _plugin.cancel(focusNotificationId);
 
-      final durationLabel = _formatDuration(plannedDurationSeconds);
+      final durationLabel = plannedDurationSeconds == null
+          ? ''
+          : _formatDuration(plannedDurationSeconds);
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          focusChannelId,
-          '专注完成提醒',
-          channelDescription: 'CHRONA 番茄钟完成提醒',
+          channelId,
+          title,
+          channelDescription: 'CHRONA $title',
           importance: Importance.max,
           priority: Priority.high,
-          playSound: true,
+          playSound: playSound,
           enableVibration: true,
           vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
           category: AndroidNotificationCategory.alarm,
@@ -140,13 +186,13 @@ class NotificationService {
             ),
           ],
         ),
-        iOS: const DarwinNotificationDetails(presentSound: true),
+        iOS: DarwinNotificationDetails(presentSound: playSound),
       );
 
       await _plugin.zonedSchedule(
         focusNotificationId,
-        '专注完成',
-        '$taskTitle\n本轮 $durationLabel 已结束',
+        title,
+        body(durationLabel),
         tz.TZDateTime.from(endsAt, tz.local),
         notificationDetails,
         // Deliberately avoid SCHEDULE_EXACT_ALARM. This keeps CHRONA a normal
@@ -155,7 +201,7 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
-        payload: 'focus_finished',
+        payload: payload,
       );
     });
   }

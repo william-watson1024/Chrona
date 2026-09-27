@@ -7,6 +7,8 @@ import '../services/notification_service.dart';
 
 enum FocusTimerStatus { idle, running, paused, finished, cancelled }
 
+enum FocusMode { focus, rest }
+
 abstract final class FocusTimerDurations {
   static const tenSeconds = 10;
   static const thirtySeconds = 30;
@@ -37,6 +39,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   FocusProvider({
     required this.task,
     this.plannedDurationSeconds = FocusTimerDurations.pomodoro,
+    this.mode = FocusMode.focus,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
         remainingSeconds = plannedDurationSeconds {
@@ -45,6 +48,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   final Task task;
   final int plannedDurationSeconds;
+  final FocusMode mode;
   final DateTime Function() _now;
 
   DateTime? startedAt;
@@ -60,6 +64,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isRunning => status == FocusTimerStatus.running;
   bool get isPaused => status == FocusTimerStatus.paused;
   bool get isFinished => status == FocusTimerStatus.finished;
+  bool get isBreak => mode == FocusMode.rest;
 
   int get actualDurationSeconds {
     final start = startedAt;
@@ -138,6 +143,26 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void skipBreak() {
+    if (!isBreak ||
+        (status != FocusTimerStatus.running &&
+            status != FocusTimerStatus.paused)) {
+      return;
+    }
+    if (status == FocusTimerStatus.running) _refreshFromClock();
+    if (status != FocusTimerStatus.running &&
+        status != FocusTimerStatus.paused) {
+      return;
+    }
+    endedAt = _now();
+    remainingSeconds = 0;
+    status = FocusTimerStatus.finished;
+    _ticker?.cancel();
+    _ticker = null;
+    unawaited(NotificationService.instance.cancelFocusEnd());
+    notifyListeners();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refreshFromClock();
@@ -170,13 +195,15 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _scheduleNotification() {
     final end = endsAt;
     if (end == null) return;
-    unawaited(
-      NotificationService.instance.scheduleFocusEnd(
-        endsAt: end,
-        taskTitle: task.title,
-        plannedDurationSeconds: plannedDurationSeconds,
-      ),
-    );
+    if (isBreak) {
+      unawaited(NotificationService.instance.scheduleBreakEnd(endsAt: end));
+      return;
+    }
+    unawaited(NotificationService.instance.scheduleFocusEnd(
+      endsAt: end,
+      taskTitle: task.title,
+      plannedDurationSeconds: plannedDurationSeconds,
+    ));
   }
 
   @override

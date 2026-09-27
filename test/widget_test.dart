@@ -1,11 +1,13 @@
 import 'package:chrona/app.dart';
 import 'package:chrona/models/task.dart';
 import 'package:chrona/providers/focus_provider.dart';
+import 'package:chrona/providers/focus_settings_provider.dart';
 import 'package:chrona/providers/focus_session_provider.dart';
 import 'package:chrona/providers/task_provider.dart';
 import 'package:chrona/screens/focus/focus_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 TaskProvider createTestTaskProvider() {
   return TaskProvider.inMemory([
@@ -127,6 +129,75 @@ void main() {
 
     expect(find.text('本轮专注完成'), findsOneWidget);
     expect(find.text('测试任务'), findsOneWidget);
+  });
+
+  testWidgets('completed focus saves and enters break mode', (tester) async {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    final focusProvider = FocusProvider(
+      task: const Task(
+        id: 1,
+        title: '测试任务',
+        completed: false,
+        createdAt: 1,
+      ),
+      plannedDurationSeconds: 1,
+      now: () => currentTime,
+    );
+    final sessionProvider = FocusSessionProvider.inMemory();
+    final settingsProvider =
+        FocusSettingsProvider.inMemory(breakDurationSeconds: 1);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: sessionProvider),
+          ChangeNotifierProvider.value(value: settingsProvider),
+        ],
+        child: MaterialApp(
+          home: FocusScreen(
+            task: focusProvider.task,
+            durationSeconds: 1,
+            focusProvider: focusProvider,
+          ),
+        ),
+      ),
+    );
+
+    currentTime = currentTime.add(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('本轮专注完成'), findsOneWidget);
+
+    final saveButton = find.text('保存').last;
+    await tester.scrollUntilVisible(
+      saveButton,
+      240,
+      scrollable: find.ancestor(
+        of: saveButton,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+    expect(find.text('休息一下'), findsOneWidget);
+    expect(find.text('短休息'), findsOneWidget);
+    expect(sessionProvider.sessions, hasLength(1));
+
+    final skipBreak = find.text('跳过休息');
+    await tester.scrollUntilVisible(
+      skipBreak,
+      240,
+      scrollable: find.ancestor(
+        of: skipBreak,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(skipBreak);
+    await tester.pump();
+    expect(find.text('准备开始下一轮'), findsOneWidget);
+    expect(sessionProvider.sessions, hasLength(1));
+
+    focusProvider.dispose();
   });
 
   testWidgets('pause freezes time and resume rebuilds the end timestamp',

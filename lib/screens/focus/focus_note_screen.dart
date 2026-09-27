@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../models/focus_session.dart';
 import '../../providers/focus_provider.dart';
+import '../../providers/focus_settings_provider.dart';
 import '../../providers/focus_session_provider.dart';
 import '../../services/notification_service.dart';
 import '../../utils/focus_formatters.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
+import 'focus_screen.dart';
 
 class FocusNoteScreen extends StatefulWidget {
   const FocusNoteScreen({super.key, required this.session});
@@ -75,10 +77,29 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         });
         return;
       }
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HistoryScreen()),
-        (route) => route.isFirst,
-      );
+      if (widget.session.status == FocusTimerStatus.finished) {
+        final settings =
+            Provider.of<FocusSettingsProvider?>(context, listen: false);
+        final breakDuration = settings?.breakDurationSeconds ??
+            FocusSettingsProvider.defaultBreakDurationSeconds;
+        final nextFocusDuration = widget.session.task.durationSeconds;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => FocusScreen(
+              task: widget.session.task,
+              durationSeconds: breakDuration,
+              mode: FocusMode.rest,
+              nextFocusDurationSeconds: nextFocusDuration,
+            ),
+          ),
+          (route) => route.isFirst,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HistoryScreen()),
+          (route) => route.isFirst,
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
