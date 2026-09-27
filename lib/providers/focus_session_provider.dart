@@ -25,6 +25,22 @@ class FocusSessionProvider extends ChangeNotifier {
   bool get isLoading => !_isLoaded;
   bool get isSaving => _isSaving;
 
+  double get todayFocusDurationHours {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final tomorrowStart = todayStart.add(const Duration(days: 1));
+    final todaySessions = _sessions.where((session) {
+      return !session.startedAt.isBefore(todayStart) &&
+          session.startedAt.isBefore(tomorrowStart);
+    });
+
+    var actualSeconds = 0;
+    for (final session in todaySessions) {
+      actualSeconds += session.actualDurationSeconds;
+    }
+    return actualSeconds / Duration.secondsPerHour;
+  }
+
   Future<void> loadSessions() async {
     if (_isLoaded) return;
 

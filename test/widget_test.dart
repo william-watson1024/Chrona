@@ -1,4 +1,5 @@
 import 'package:chrona/app.dart';
+import 'package:chrona/models/focus_session.dart';
 import 'package:chrona/models/task.dart';
 import 'package:chrona/providers/focus_provider.dart';
 import 'package:chrona/providers/focus_settings_provider.dart';
@@ -26,6 +27,25 @@ FocusSessionProvider createTestFocusSessionProvider() {
 }
 
 void main() {
+  test('calculates today focus duration in hours from real sessions', () {
+    final now = DateTime.now();
+    final provider = FocusSessionProvider.inMemory([
+      FocusSession(
+        taskId: 1,
+        taskTitleSnapshot: '测试任务',
+        startedAt: now.subtract(const Duration(minutes: 10)),
+        endedAt: now.subtract(const Duration(minutes: 5)),
+        plannedDurationSeconds: 10 * 60,
+        actualDurationSeconds: 5 * 60,
+        note: null,
+        status: FocusSessionStatus.completed,
+        createdAt: now,
+      ),
+    ]);
+
+    expect(provider.todayFocusDurationHours, closeTo(5 / 60, 0.001));
+  });
+
   testWidgets('app starts', (tester) async {
     await tester.pumpWidget(
       ChronaApp(

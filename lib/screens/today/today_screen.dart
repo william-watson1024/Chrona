@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
 import '../../providers/focus_provider.dart';
+import '../../providers/focus_session_provider.dart';
 import '../../providers/task_provider.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
@@ -158,6 +159,7 @@ class _TodayHomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final taskProvider = context.watch<TaskProvider>();
+    final focusSessionProvider = context.watch<FocusSessionProvider>();
     if (taskProvider.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
@@ -177,7 +179,11 @@ class _TodayHomeContent extends StatelessWidget {
               children: [
                 const BrandHeader(),
                 const SizedBox(height: 48),
-                _TodaySummary(completedCount: taskProvider.completedCount),
+                _TodaySummary(
+                  completedCount: taskProvider.completedCount,
+                  focusDurationHours:
+                      focusSessionProvider.todayFocusDurationHours,
+                ),
                 const SizedBox(height: 27),
               ],
             ),
@@ -257,9 +263,13 @@ class _TodayHomeContent extends StatelessWidget {
 }
 
 class _TodaySummary extends StatelessWidget {
-  const _TodaySummary({required this.completedCount});
+  const _TodaySummary({
+    required this.completedCount,
+    required this.focusDurationHours,
+  });
 
   final int completedCount;
+  final double focusDurationHours;
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +306,10 @@ class _TodaySummary extends StatelessWidget {
             height: 48,
             margin: const EdgeInsets.symmetric(horizontal: 17),
             color: const Color(0xFFE6E6E6)),
-        const _StatBlock(value: '3.5', label: '专注时长 (h)'),
+        _StatBlock(
+          value: focusDurationHours.toStringAsFixed(2),
+          label: '专注时长 (h)',
+        ),
       ],
     );
   }
