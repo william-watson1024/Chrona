@@ -10,6 +10,7 @@ abstract final class FocusTimerDurations {
   static const tenSeconds = 10;
   static const thirtySeconds = 30;
   static const oneMinute = 60;
+  static const newTaskDefault = 15 * 60;
   static const pomodoro = 25 * 60;
 }
 

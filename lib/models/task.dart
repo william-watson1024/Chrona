@@ -6,6 +6,7 @@ class Task {
     required this.completed,
     required this.createdAt,
     this.completedAt,
+    this.durationSeconds = 25 * 60,
   });
 
   final int? id;
@@ -14,6 +15,7 @@ class Task {
   final bool completed;
   final int createdAt;
   final int? completedAt;
+  final int durationSeconds;
 
   factory Task.fromMap(Map<String, Object?> map) {
     return Task(
@@ -23,6 +25,7 @@ class Task {
       completed: (map['completed'] as int) == 1,
       createdAt: map['created_at'] as int,
       completedAt: map['completed_at'] as int?,
+      durationSeconds: map['duration_seconds'] as int? ?? 25 * 60,
     );
   }
 
@@ -34,6 +37,7 @@ class Task {
       'completed': completed ? 1 : 0,
       'created_at': createdAt,
       'completed_at': completedAt,
+      'duration_seconds': durationSeconds,
     };
   }
 
@@ -44,6 +48,7 @@ class Task {
     bool? completed,
     int? createdAt,
     int? completedAt,
+    int? durationSeconds,
     bool clearCompletedAt = false,
   }) {
     return Task(
@@ -53,6 +58,7 @@ class Task {
       completed: completed ?? this.completed,
       createdAt: createdAt ?? this.createdAt,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
     );
   }
 }

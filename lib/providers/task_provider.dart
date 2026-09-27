@@ -38,7 +38,11 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addTask({required String title, String? note}) async {
+  Future<void> addTask({
+    required String title,
+    String? note,
+    int durationSeconds = 15 * 60,
+  }) async {
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) return;
 
@@ -47,6 +51,7 @@ class TaskProvider extends ChangeNotifier {
       note: note?.trim().isEmpty == true ? null : note?.trim(),
       completed: false,
       createdAt: DateTime.now().millisecondsSinceEpoch,
+      durationSeconds: durationSeconds,
     );
     final savedTask = _isInMemory
         ? task.copyWith(id: _nextInMemoryId--)

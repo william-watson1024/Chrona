@@ -18,7 +18,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     _database = await openDatabase(
       databasePath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -27,11 +27,19 @@ class AppDatabase {
             note TEXT,
             completed INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            completed_at INTEGER
+            completed_at INTEGER,
+            duration_seconds INTEGER NOT NULL DEFAULT 900
           )
         ''');
 
         await _insertInitialTasks(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE task ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT 900',
+          );
+        }
       },
     );
     return _database!;
@@ -85,6 +93,7 @@ class AppDatabase {
       await db.insert('task', {
         ...initialTask,
         'created_at': createdAt - index,
+        'duration_seconds': index.isEven ? 25 * 60 : 50 * 60,
         'completed_at':
             initialTask['completed'] == 1 ? createdAt - index : null,
       });

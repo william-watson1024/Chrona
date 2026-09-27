@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -53,13 +54,17 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
         (activeProvider.isRunning || activeProvider.isPaused);
     if (!canResume) {
       activeProvider?.dispose();
-      _activeFocusProvider = FocusProvider(task: task);
+      _activeFocusProvider = FocusProvider(
+        task: task,
+        plannedDurationSeconds: task.durationSeconds,
+      );
     }
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FocusScreen(
           task: task,
+          durationSeconds: task.durationSeconds,
           focusProvider: _activeFocusProvider,
         ),
       ),
@@ -188,6 +193,7 @@ class _TodayHomeContent extends StatelessWidget {
       await context.read<TaskProvider>().addTask(
             title: draft.title,
             note: draft.note,
+            durationSeconds: draft.durationSeconds,
           );
     }
   }
@@ -268,10 +274,15 @@ class _TodaySummary extends StatelessWidget {
 }
 
 class _TaskDraft {
-  const _TaskDraft({required this.title, required this.note});
+  const _TaskDraft({
+    required this.title,
+    required this.note,
+    required this.durationSeconds,
+  });
 
   final String title;
   final String note;
+  final int durationSeconds;
 }
 
 class _AddTaskDialog extends StatefulWidget {
@@ -285,6 +296,17 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _noteController;
   String? _titleError;
+  String? _durationError;
+  Duration _duration = const Duration(minutes: 25);
+
+  int get _durationSeconds => _duration.inSeconds;
+
+  String get _durationLabel {
+    final hours = _duration.inHours;
+    final minutes = _duration.inMinutes.remainder(60);
+    final seconds = _duration.inSeconds.remainder(60);
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
@@ -306,42 +328,101 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       title: const Text('添加任务'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _titleController,
-            autofocus: true,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              labelText: '标题',
-              hintText: '输入任务名称',
-              errorText: _titleError,
-              enabledBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+      content: SizedBox(
+        width: 320,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _titleController,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: '标题',
+                  hintText: '输入任务名称',
+                  errorText: _titleError,
+                  enabledBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+                  ),
+                  focusedBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFF111111)),
+                  ),
+                ),
               ),
-              focusedBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF111111)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _noteController,
+                maxLines: 2,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: '备注（可选）',
+                  hintText: '补充一点说明',
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFF111111)),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    '\u4E13\u6CE8\u65F6\u957F',
+                    style: TextStyle(
+                      color: Color(0xFF111111),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    _durationLabel,
+                    style: const TextStyle(
+                      color: Color(0xFF111111),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 156,
+                width: double.infinity,
+                child: CupertinoTheme(
+                  data: const CupertinoThemeData(
+                    brightness: Brightness.light,
+                    primaryColor: Color(0xFF111111),
+                  ),
+                  child: CupertinoTimerPicker(
+                    mode: CupertinoTimerPickerMode.hms,
+                    initialTimerDuration: _duration,
+                    onTimerDurationChanged: (duration) => setState(() {
+                      _duration = duration;
+                      _durationError = null;
+                    }),
+                  ),
+                ),
+              ),
+              if (_durationError != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _durationError!,
+                    style: const TextStyle(
+                      color: Color(0xFFB3261E),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _noteController,
-            maxLines: 2,
-            textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              labelText: '备注（可选）',
-              hintText: '补充一点说明',
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFFDDDDDD)),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF111111)),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -355,10 +436,16 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
               setState(() => _titleError = '标题不能为空');
               return;
             }
+            if (_durationSeconds == 0) {
+              setState(() => _durationError =
+                  '\u4E13\u6CE8\u65F6\u957F\u4E0D\u80FD\u4E3A 0');
+              return;
+            }
             Navigator.of(context).pop(
               _TaskDraft(
                 title: title,
                 note: _noteController.text,
+                durationSeconds: _durationSeconds,
               ),
             );
           },
@@ -467,7 +554,7 @@ class _TaskRow extends StatelessWidget {
           const SizedBox(width: 9),
           Opacity(
               opacity: task.completed ? 0.65 : 1,
-              child: Text(_mockFocusDuration(task),
+              child: Text(_formatTaskDuration(task.durationSeconds),
                   style: const TextStyle(
                       color: Color(0xFF858585), fontSize: 16, height: 1.1))),
           const SizedBox(width: 17),
@@ -487,9 +574,23 @@ class _TaskRow extends StatelessWidget {
   }
 }
 
-String _mockFocusDuration(Task task) {
+// ignore: unused_element
+String _legacyMockFocusDuration(Task task) {
   const fiftyMinuteTasks = {'写 RagForge', '健身', '看技术分享'};
   return fiftyMinuteTasks.contains(task.title) ? '50 min' : '25 min';
+}
+
+String _formatTaskDuration(int seconds) {
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final remainingSeconds = seconds % 60;
+  if (hours > 0) {
+    return '$hours h ${minutes.toString().padLeft(2, '0')} min';
+  }
+  if (remainingSeconds > 0) {
+    return '$minutes min ${remainingSeconds.toString().padLeft(2, '0')} sec';
+  }
+  return '$minutes min';
 }
 
 class _CompletionButton extends StatelessWidget {
