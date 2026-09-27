@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/focus_session.dart';
 import '../models/task.dart';
 
 class AppDatabase {
@@ -18,7 +19,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     _database = await openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -33,12 +34,16 @@ class AppDatabase {
         ''');
 
         await _insertInitialTasks(db);
+        await _createFocusSessionTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute(
             'ALTER TABLE task ADD COLUMN duration_seconds INTEGER NOT NULL DEFAULT 900',
           );
+        }
+        if (oldVersion < 3) {
+          await _createFocusSessionTable(db);
         }
       },
     );
@@ -75,6 +80,38 @@ class AppDatabase {
 
     final db = await database;
     await db.delete('task', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<FocusSession>> loadFocusSessions() async {
+    final db = await database;
+    final rows = await db.query(
+      'focus_session',
+      orderBy: 'started_at DESC, id DESC',
+    );
+    return rows.map(FocusSession.fromMap).toList();
+  }
+
+  Future<FocusSession> insertFocusSession(FocusSession session) async {
+    final db = await database;
+    final id = await db.insert('focus_session', session.toMap()..remove('id'));
+    return session.copyWith(id: id);
+  }
+
+  Future<void> _createFocusSessionTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS focus_session (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER,
+        task_title_snapshot TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL,
+        planned_duration_seconds INTEGER NOT NULL,
+        actual_duration_seconds INTEGER NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   Future<void> _insertInitialTasks(Database db) async {

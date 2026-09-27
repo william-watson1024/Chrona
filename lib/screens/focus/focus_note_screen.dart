@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../../data/mock_data.dart';
+import '../../models/focus_session.dart';
 import '../../providers/focus_provider.dart';
+import '../../providers/focus_session_provider.dart';
 import '../../services/notification_service.dart';
+import '../../utils/focus_formatters.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 
@@ -17,17 +20,72 @@ class FocusNoteScreen extends StatefulWidget {
 
 class _FocusNoteScreenState extends State<FocusNoteScreen> {
   late final TextEditingController _noteController;
+  late final FocusSessionProvider _sessionProvider;
+  late final bool _ownsSessionProvider;
+  bool _isSaving = false;
+  String? _saveError;
 
   @override
   void initState() {
     super.initState();
-    _noteController = TextEditingController(text: ChronaMockData.focusNote);
+    _noteController = TextEditingController();
+    final inheritedProvider =
+        Provider.of<FocusSessionProvider?>(context, listen: false);
+    _ownsSessionProvider = inheritedProvider == null;
+    _sessionProvider = inheritedProvider ?? FocusSessionProvider();
   }
 
   @override
   void dispose() {
     _noteController.dispose();
+    if (_ownsSessionProvider) _sessionProvider.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveSession() async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
+    final session = FocusSession(
+      taskId: widget.session.task.id,
+      taskTitleSnapshot: widget.session.task.title,
+      startedAt: widget.session.startedAt,
+      endedAt: widget.session.endedAt,
+      plannedDurationSeconds: widget.session.plannedDurationSeconds,
+      actualDurationSeconds: widget.session.actualDurationSeconds,
+      note: _noteController.text.trim().isEmpty
+          ? null
+          : _noteController.text.trim(),
+      status: widget.session.status == FocusTimerStatus.cancelled
+          ? FocusSessionStatus.cancelled
+          : FocusSessionStatus.completed,
+      createdAt: DateTime.now(),
+    );
+
+    try {
+      final saved = await _sessionProvider.saveSession(session);
+      if (!mounted) return;
+      if (saved == null) {
+        setState(() {
+          _isSaving = false;
+          _saveError = '保存失败，请重试';
+        });
+        return;
+      }
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HistoryScreen()),
+        (route) => route.isFirst,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _saveError = '保存失败，请重试';
+      });
+    }
   }
 
   @override
@@ -123,13 +181,19 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                       child: const Text('停止提醒'),
                     ),
                     const SizedBox(height: 12),
+                    if (_saveError != null) ...[
+                      Text(
+                        _saveError!,
+                        style: const TextStyle(
+                          color: Color(0xFFB3261E),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     PrimaryButton(
                       label: '保存',
-                      onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                            builder: (_) => const HistoryScreen()),
-                        (route) => route.isFirst,
-                      ),
+                      onPressed: _isSaving ? () {} : _saveSession,
                     ),
                   ],
                 ),
@@ -154,14 +218,11 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
   }
 
   String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:'
-        '${time.minute.toString().padLeft(2, '0')}';
+    return formatFocusTime(time);
   }
 
   String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    if (minutes > 0) return '$minutes min';
-    return '$seconds sec';
+    return formatFocusDuration(seconds);
   }
 }
 

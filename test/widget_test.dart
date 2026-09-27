@@ -1,6 +1,7 @@
 import 'package:chrona/app.dart';
 import 'package:chrona/models/task.dart';
 import 'package:chrona/providers/focus_provider.dart';
+import 'package:chrona/providers/focus_session_provider.dart';
 import 'package:chrona/providers/task_provider.dart';
 import 'package:chrona/screens/focus/focus_screen.dart';
 import 'package:flutter/material.dart';
@@ -18,9 +19,18 @@ TaskProvider createTestTaskProvider() {
   ]);
 }
 
+FocusSessionProvider createTestFocusSessionProvider() {
+  return FocusSessionProvider.inMemory();
+}
+
 void main() {
   testWidgets('app starts', (tester) async {
-    await tester.pumpWidget(ChronaApp(taskProvider: createTestTaskProvider()));
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: createTestTaskProvider(),
+        focusSessionProvider: createTestFocusSessionProvider(),
+      ),
+    );
 
     expect(find.byType(MaterialApp), findsOneWidget);
     expect(find.text('C H R O N A'), findsOneWidget);
@@ -31,7 +41,12 @@ void main() {
   });
 
   testWidgets('focus demo flow navigates to history', (tester) async {
-    await tester.pumpWidget(ChronaApp(taskProvider: createTestTaskProvider()));
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: createTestTaskProvider(),
+        focusSessionProvider: createTestFocusSessionProvider(),
+      ),
+    );
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
     await tester.pumpAndSettle();
@@ -62,11 +77,17 @@ void main() {
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
     expect(find.text('记录'), findsNWidgets(2));
-    expect(find.text('20:00 — 20:25'), findsOneWidget);
+    expect(find.text('阅读 Orca 论文'), findsOneWidget);
+    expect(find.text('补充一条 Mock 记录'), findsOneWidget);
   });
 
   testWidgets('adding a task refreshes the home list', (tester) async {
-    await tester.pumpWidget(ChronaApp(taskProvider: createTestTaskProvider()));
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: createTestTaskProvider(),
+        focusSessionProvider: createTestFocusSessionProvider(),
+      ),
+    );
 
     await tester.scrollUntilVisible(find.text('添加任务'), 240);
     await tester.tap(find.text('添加任务'));
@@ -141,7 +162,12 @@ void main() {
   });
 
   testWidgets('paused focus resumes after returning to today', (tester) async {
-    await tester.pumpWidget(ChronaApp(taskProvider: createTestTaskProvider()));
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: createTestTaskProvider(),
+        focusSessionProvider: createTestFocusSessionProvider(),
+      ),
+    );
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
     await tester.pumpAndSettle();

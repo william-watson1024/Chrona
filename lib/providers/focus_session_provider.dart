@@ -1,0 +1,68 @@
+import 'package:flutter/foundation.dart';
+
+import '../database/app_database.dart';
+import '../models/focus_session.dart';
+
+class FocusSessionProvider extends ChangeNotifier {
+  FocusSessionProvider({AppDatabase? database})
+      : _database = database ?? AppDatabase.instance,
+        _sessions = [];
+
+  FocusSessionProvider.inMemory([List<FocusSession>? sessions])
+      : _database = AppDatabase.instance,
+        _sessions = List<FocusSession>.from(sessions ?? const []),
+        _isLoaded = true,
+        _isInMemory = true;
+
+  final AppDatabase _database;
+  final List<FocusSession> _sessions;
+  bool _isLoaded = false;
+  bool _isInMemory = false;
+  bool _isSaving = false;
+  int _nextInMemoryId = -1;
+
+  List<FocusSession> get sessions => List.unmodifiable(_sessions);
+  bool get isLoading => !_isLoaded;
+  bool get isSaving => _isSaving;
+
+  Future<void> loadSessions() async {
+    if (_isLoaded) return;
+
+    try {
+      _sessions
+        ..clear()
+        ..addAll(await _database.loadFocusSessions());
+      _sortSessions();
+    } finally {
+      _isLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  Future<FocusSession?> saveSession(FocusSession session) async {
+    if (_isSaving) return null;
+    _isSaving = true;
+    notifyListeners();
+
+    try {
+      final savedSession = _isInMemory
+          ? session.copyWith(id: _nextInMemoryId--)
+          : await _database.insertFocusSession(session);
+      _sessions.add(savedSession);
+      _sortSessions();
+      notifyListeners();
+      return savedSession;
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  void _sortSessions() {
+    _sessions.sort((a, b) {
+      final byStartedAt = b.startedAt.compareTo(a.startedAt);
+      if (byStartedAt != 0) return byStartedAt;
+      return (b.id ?? 0).compareTo(a.id ?? 0);
+    });
+  }
+}
