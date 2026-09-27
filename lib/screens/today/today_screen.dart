@@ -43,7 +43,9 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
 
   @override
   void dispose() {
-    _activeFocusProvider?.dispose();
+    final provider = _activeFocusProvider;
+    provider?.removeListener(_handleActiveFocusChanged);
+    provider?.dispose();
     super.dispose();
   }
 
@@ -53,11 +55,13 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
         activeProvider.task.id == task.id &&
         (activeProvider.isRunning || activeProvider.isPaused);
     if (!canResume) {
+      activeProvider?.removeListener(_handleActiveFocusChanged);
       activeProvider?.dispose();
       _activeFocusProvider = FocusProvider(
         task: task,
         plannedDurationSeconds: task.durationSeconds,
       );
+      _activeFocusProvider!.addListener(_handleActiveFocusChanged);
     }
 
     Navigator.of(context).push(
@@ -66,6 +70,24 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
           task: task,
           durationSeconds: task.durationSeconds,
           focusProvider: _activeFocusProvider,
+        ),
+      ),
+    );
+  }
+
+  void _handleActiveFocusChanged() {
+    final activeProvider = _activeFocusProvider;
+    if (!mounted || activeProvider == null || !activeProvider.isFinished) {
+      return;
+    }
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FocusScreen(
+          task: activeProvider.task,
+          durationSeconds: activeProvider.plannedDurationSeconds,
+          focusProvider: activeProvider,
         ),
       ),
     );

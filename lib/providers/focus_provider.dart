@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../models/task.dart';
+import '../services/notification_service.dart';
 
 enum FocusTimerStatus { idle, running, paused, finished, cancelled }
 
@@ -58,6 +59,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get isRunning => status == FocusTimerStatus.running;
   bool get isPaused => status == FocusTimerStatus.paused;
+  bool get isFinished => status == FocusTimerStatus.finished;
 
   int get actualDurationSeconds {
     final start = startedAt;
@@ -92,6 +94,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     status = FocusTimerStatus.running;
     _refreshFromClock();
     _startTicker();
+    _scheduleNotification();
     notifyListeners();
   }
 
@@ -105,6 +108,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ticker = null;
     endsAt = null;
     status = FocusTimerStatus.paused;
+    unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
 
@@ -116,6 +120,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     pausedRemainingSeconds = null;
     status = FocusTimerStatus.running;
     _startTicker();
+    _scheduleNotification();
     notifyListeners();
   }
 
@@ -129,6 +134,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     status = FocusTimerStatus.cancelled;
     _ticker?.cancel();
     _ticker = null;
+    unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
 
@@ -159,6 +165,18 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     remainingSeconds = (millisecondsRemaining / 1000).ceil();
     notifyListeners();
+  }
+
+  void _scheduleNotification() {
+    final end = endsAt;
+    if (end == null) return;
+    unawaited(
+      NotificationService.instance.scheduleFocusEnd(
+        endsAt: end,
+        taskTitle: task.title,
+        plannedDurationSeconds: plannedDurationSeconds,
+      ),
+    );
   }
 
   @override

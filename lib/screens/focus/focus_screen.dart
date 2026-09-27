@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
 import '../../providers/focus_provider.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 import 'focus_note_screen.dart';
@@ -43,6 +44,12 @@ class _FocusScreenState extends State<FocusScreen> {
     _focusProvider.addListener(_handleFocusChanged);
     if (_focusProvider.status == FocusTimerStatus.idle) {
       _focusProvider.start();
+    }
+    if (_focusProvider.status == FocusTimerStatus.finished ||
+        _focusProvider.status == FocusTimerStatus.cancelled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleFocusChanged();
+      });
     }
   }
 
@@ -172,6 +179,14 @@ class _FocusScreenState extends State<FocusScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
+                          if (provider.status == FocusTimerStatus.finished)
+                            TextButton(
+                              onPressed: () =>
+                                  NotificationService.instance.cancelFocusEnd(),
+                              child: const Text('停止提醒'),
+                            ),
+                          if (provider.status == FocusTimerStatus.finished)
+                            const SizedBox(height: 8),
                           TextButton(
                             onPressed: _confirmEnd,
                             style: TextButton.styleFrom(

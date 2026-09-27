@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/mock_data.dart';
 import '../../providers/focus_provider.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 
@@ -113,6 +114,15 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                       ),
                     ),
                     const SizedBox(height: 38),
+                    TextButton(
+                      onPressed: () =>
+                          NotificationService.instance.cancelFocusEnd(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF111111),
+                      ),
+                      child: const Text('停止提醒'),
+                    ),
+                    const SizedBox(height: 12),
                     PrimaryButton(
                       label: '保存',
                       onPressed: () => Navigator.of(context).pushAndRemoveUntil(
