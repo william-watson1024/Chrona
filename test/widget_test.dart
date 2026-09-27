@@ -7,7 +7,8 @@ void main() {
     await tester.pumpWidget(const ChronaApp());
 
     expect(find.byType(MaterialApp), findsOneWidget);
-    expect(find.text('CHRONA'), findsOneWidget);
+    expect(find.text('C H R O N A'), findsOneWidget);
+    expect(find.text('阅读 Orca 论文'), findsOneWidget);
+    expect(find.text('添加任务'), findsOneWidget);
   });
 }
-
