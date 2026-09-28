@@ -66,14 +66,6 @@ class _SettingsContent extends StatelessWidget {
                         options: _breakOptions,
                         onChanged: settings.updateBreakDuration,
                       ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        '修改后仅影响下一轮计时',
-                        style: TextStyle(
-                          color: Color(0xFF858585),
-                          fontSize: 16,
-                        ),
-                      ),
                     ],
                   );
                 },
