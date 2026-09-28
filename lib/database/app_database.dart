@@ -184,6 +184,7 @@ class AppDatabase {
 
   Future<JournalEntry?> getJournalByDate(DateTime date) async {
     final db = await database;
+    await _createJournalEntryTable(db);
     final rows = await db.query(
       'journal_entry',
       where: 'entry_date = ?',
@@ -196,6 +197,7 @@ class AppDatabase {
 
   Future<List<JournalEntry>> getJournals() async {
     final db = await database;
+    await _createJournalEntryTable(db);
     final rows = await db.query(
       'journal_entry',
       orderBy: 'entry_date DESC, id DESC',
@@ -205,6 +207,7 @@ class AppDatabase {
 
   Future<JournalEntry> saveJournal(JournalEntry entry) async {
     final db = await database;
+    await _createJournalEntryTable(db);
     final existingRows = await db.query(
       'journal_entry',
       columns: ['id'],
@@ -230,6 +233,7 @@ class AppDatabase {
 
   Future<void> updateJournal(JournalEntry entry) async {
     final db = await database;
+    await _createJournalEntryTable(db);
     final values = entry.toMap()..remove('id');
     if (entry.id != null) {
       await db.update(

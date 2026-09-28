@@ -286,17 +286,13 @@ class _TodayTabContent extends StatelessWidget {
           onPageChanged: onPageChanged,
           itemBuilder: (context, page) {
             final date = dateForPage(page);
-            return ChangeNotifierProvider<JournalProvider>(
+            return _TodayDiaryContent(
               key: ValueKey(JournalEntry.dateKey(date)),
-              create: (_) => JournalProvider()..loadJournal(date),
-              child: _TodayDiaryContent(
-                key: ValueKey(JournalEntry.dateKey(date)),
-                selectedDate: date,
-                onOpenDatePicker: onOpenDatePicker,
-                onOpenSettings: onOpenSettings,
-                onTabChanged: onTabChanged,
-                onGoToLastYear: onGoToLastYear,
-              ),
+              selectedDate: date,
+              onOpenDatePicker: onOpenDatePicker,
+              onOpenSettings: onOpenSettings,
+              onTabChanged: onTabChanged,
+              onGoToLastYear: onGoToLastYear,
             );
           },
         ),
@@ -724,6 +720,7 @@ class _TodayDiaryContent extends StatefulWidget {
 class _TodayDiaryContentState extends State<_TodayDiaryContent> {
   late final TextEditingController _questionController;
   late final TextEditingController _diaryController;
+  late final JournalProvider _journalProvider;
   String _questionText = JournalEntry.defaultQuestionText;
   String? _appliedDate;
   bool _hasLocalEdits = false;
@@ -732,6 +729,8 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
   @override
   void initState() {
     super.initState();
+    _journalProvider = JournalProvider()..loadJournal(widget.selectedDate);
+    _journalProvider.addListener(_onJournalChanged);
     _questionController = TextEditingController();
     _diaryController = TextEditingController();
     _questionController.addListener(_onTextChanged);
@@ -740,6 +739,9 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
 
   @override
   void dispose() {
+    _journalProvider
+      ..removeListener(_onJournalChanged)
+      ..dispose();
     _questionController
       ..removeListener(_onTextChanged)
       ..dispose();
@@ -754,8 +756,12 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
     setState(() {});
   }
 
+  void _onJournalChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _save() async {
-    final provider = context.read<JournalProvider>();
+    final provider = _journalProvider;
     try {
       await provider.saveJournal(
         date: widget.selectedDate,
@@ -777,18 +783,19 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
   }
 
   Future<void> _changeQuestion() async {
-    final controller = TextEditingController(text: _questionText);
+    var draftQuestion = _questionText;
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         title: const Text('\u4fee\u6539\u4eca\u65e5\u95ee\u9898'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: _questionText,
           autofocus: true,
           maxLines: 4,
           maxLength: 200,
+          onChanged: (value) => draftQuestion = value,
           decoration: const InputDecoration(
             hintText: '\u8f93\u5165\u4eca\u5929\u7684\u95ee\u9898',
           ),
@@ -799,7 +806,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
             child: const Text('\u53d6\u6d88'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(draftQuestion),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF111111),
               foregroundColor: Colors.white,
@@ -809,22 +816,21 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
         ],
       ),
     );
-    controller.dispose();
     if (value == null || !mounted) return;
-    setState(() {
-      _questionText = value.trim().isEmpty
-          ? JournalEntry.defaultQuestionText
-          : value.trim();
-      _hasLocalEdits = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _questionText = JournalEntry.normalizeQuestionText(value);
+        _hasLocalEdits = true;
+      });
     });
-    await context.read<JournalProvider>().updateQuestion(_questionText);
   }
 
   @override
   Widget build(BuildContext context) {
     final taskProvider = context.watch<TaskProvider>();
     final sessionProvider = context.watch<FocusSessionProvider>();
-    final journalProvider = context.watch<JournalProvider>();
+    final journalProvider = _journalProvider;
     final loadedDate = journalProvider.loadedDate;
     if (!journalProvider.isLoading &&
         loadedDate != null &&
@@ -833,11 +839,10 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
         if (!mounted || _appliedDate == loadedDate) return;
         _appliedDate = loadedDate;
         if (_hasLocalEdits) return;
-        final entry = context.read<JournalProvider>().entry;
+        final entry = _journalProvider.entry;
         _applyingEntry = true;
-        _questionText = entry?.questionText?.isNotEmpty == true
-            ? entry!.questionText!
-            : JournalEntry.defaultQuestionText;
+        _questionText =
+            JournalEntry.normalizeQuestionText(entry?.questionText);
         _questionController.text = entry?.questionAnswer ?? '';
         _diaryController.text = entry?.content ?? '';
         _applyingEntry = false;
@@ -894,7 +899,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _questionText,
+                        '\u201c$_questionText\u201d',
                         style: TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 18,

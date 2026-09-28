@@ -13,6 +13,7 @@ class JournalProvider extends ChangeNotifier {
   String _draftQuestionText = JournalEntry.defaultQuestionText;
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _disposed = false;
   int _loadRequest = 0;
 
   JournalEntry? get entry => _entry;
@@ -26,19 +27,18 @@ class JournalProvider extends ChangeNotifier {
     final key = JournalEntry.dateKey(date);
     _loadedDate = key;
     _isLoading = true;
-    notifyListeners();
+    _notifyListeners();
 
     try {
       final entry = await _database.getJournalByDate(date);
       if (request != _loadRequest) return;
       _entry = entry;
-      _draftQuestionText = entry?.questionText?.isNotEmpty == true
-          ? entry!.questionText!
-          : JournalEntry.defaultQuestionText;
+      _draftQuestionText =
+          JournalEntry.normalizeQuestionText(entry?.questionText);
     } finally {
       if (request == _loadRequest) {
         _isLoading = false;
-        notifyListeners();
+        _notifyListeners();
       }
     }
   }
@@ -62,16 +62,14 @@ class JournalProvider extends ChangeNotifier {
     }
 
     _isSaving = true;
-    notifyListeners();
+    _notifyListeners();
     try {
       final existing = _entry ?? await _database.getJournalByDate(date);
       final now = DateTime.now();
       final entry = JournalEntry(
         id: existing?.id,
         entryDate: JournalEntry.dateKey(date),
-        questionText: questionText.trim().isEmpty
-            ? JournalEntry.defaultQuestionText
-            : questionText.trim(),
+        questionText: JournalEntry.normalizeQuestionText(questionText),
         questionAnswer: _optionalText(questionAnswer),
         content: _optionalText(content),
         createdAt: existing?.createdAt ?? now,
@@ -80,24 +78,22 @@ class JournalProvider extends ChangeNotifier {
       final saved = await _database.saveJournal(entry);
       _entry = saved;
       _loadedDate = saved.entryDate;
-      _draftQuestionText = saved.questionText ?? JournalEntry.defaultQuestionText;
-      notifyListeners();
+      _draftQuestionText =
+          JournalEntry.normalizeQuestionText(saved.questionText);
+      _notifyListeners();
       return saved;
     } finally {
       _isSaving = false;
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
   Future<void> updateQuestion(String value) async {
-    final normalized = value.trim();
-    _draftQuestionText = normalized.isEmpty
-        ? JournalEntry.defaultQuestionText
-        : normalized;
+    _draftQuestionText = JournalEntry.normalizeQuestionText(value);
 
     final current = _entry;
     if (current == null) {
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
@@ -111,9 +107,20 @@ class JournalProvider extends ChangeNotifier {
       createdAt: current.createdAt,
       updatedAt: DateTime.now(),
     );
-    await _database.updateJournal(updated);
-    _entry = updated;
-    notifyListeners();
+    // Upsert here as well, so a record deleted externally cannot make the
+    // question edit fail because its id is no longer present.
+    _entry = await _database.saveJournal(updated);
+    _notifyListeners();
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   static String? _optionalText(String value) {

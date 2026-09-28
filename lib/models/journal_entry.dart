@@ -11,8 +11,8 @@ class JournalEntry {
   });
 
   static const defaultQuestionText =
-      '\u201c\u5982\u679c\u6ca1\u6709\u4eba\u77e5\u9053\u4f60\u7684\u9009\u62e9\uff0c\n'
-      '\u4f60\u8fd8\u4f1a\u505a\u540c\u6837\u7684\u51b3\u5b9a\u5417\uff1f\u201d';
+      '\u5982\u679c\u6ca1\u6709\u4eba\u77e5\u9053\u4f60\u7684\u9009\u62e9\uff0c\n'
+      '\u4f60\u8fd8\u4f1a\u505a\u540c\u6837\u7684\u51b3\u5b9a\u5417\uff1f';
 
   final int? id;
   final String entryDate;
@@ -28,6 +28,18 @@ class JournalEntry {
     final month = local.month.toString().padLeft(2, '0');
     final day = local.day.toString().padLeft(2, '0');
     return '${local.year.toString().padLeft(4, '0')}-$month-$day';
+  }
+
+  static String normalizeQuestionText(String? value) {
+    var text = value?.trim() ?? '';
+    if (text.isEmpty) return defaultQuestionText;
+
+    if (text.startsWith('\u201c') && text.endsWith('\u201d')) {
+      text = text.substring(1, text.length - 1).trim();
+    } else if (text.startsWith('"') && text.endsWith('"')) {
+      text = text.substring(1, text.length - 1).trim();
+    }
+    return text.isEmpty ? defaultQuestionText : text;
   }
 
   factory JournalEntry.fromMap(Map<String, Object?> map) {
