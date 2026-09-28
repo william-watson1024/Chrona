@@ -5,11 +5,21 @@ String formatFocusTime(DateTime time) {
 
 String formatFocusDuration(int seconds) {
   final safeSeconds = seconds < 0 ? 0 : seconds;
-  final minutes = safeSeconds ~/ 60;
+  final hours = safeSeconds ~/ Duration.secondsPerHour;
+  final minutes = (safeSeconds % Duration.secondsPerHour) ~/ 60;
   final remainingSeconds = safeSeconds % 60;
-  if (minutes == 0) return '$remainingSeconds sec';
-  if (remainingSeconds == 0) return '$minutes min';
-  return '$minutes min $remainingSeconds sec';
+  if (hours > 0) {
+    final result = StringBuffer('${hours}h');
+    if (minutes > 0) result.write('${minutes}m');
+    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
+    return result.toString();
+  }
+  if (minutes > 0) {
+    final result = StringBuffer('${minutes}m');
+    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
+    return result.toString();
+  }
+  return remainingSeconds > 0 ? '${remainingSeconds}s' : '';
 }
 
 String formatFocusHoursMinutes(int seconds) {
@@ -17,7 +27,8 @@ String formatFocusHoursMinutes(int seconds) {
   final hours = safeSeconds ~/ Duration.secondsPerHour;
   final minutes = (safeSeconds % Duration.secondsPerHour) ~/ 60;
   if (hours == 0) return '${minutes}m';
-  return '${hours}h ${minutes}m';
+  if (minutes == 0) return '${hours}h';
+  return '${hours}h${minutes}m';
 }
 
 DateTime startOfFocusWeek(DateTime date) {

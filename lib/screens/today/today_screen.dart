@@ -905,22 +905,7 @@ class _TaskRow extends StatelessWidget {
 }
 
 String _formatTaskDuration(int seconds) {
-  final safeSeconds = seconds < 0 ? 0 : seconds;
-  final hours = safeSeconds ~/ 3600;
-  final minutes = (safeSeconds % 3600) ~/ 60;
-  final remainingSeconds = safeSeconds % 60;
-  if (hours > 0) {
-    final result = StringBuffer('${hours}h');
-    if (minutes > 0) result.write('${minutes}m');
-    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
-    return result.toString();
-  }
-  if (minutes > 0) {
-    final result = StringBuffer('${minutes}m');
-    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
-    return result.toString();
-  }
-  return remainingSeconds > 0 ? '${remainingSeconds}s' : '';
+  return formatFocusDuration(seconds);
 }
 
 class _CompletionButton extends StatelessWidget {
