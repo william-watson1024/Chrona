@@ -178,6 +178,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
             Expanded(
               child: _TodayTabContent(
                 selectedTab: _selectedTab,
+                selectedDate: _selectedDate,
                 onStartFocus: _openFocus,
                 pageController: _pageController,
                 onPageChanged: _handlePageChanged,
@@ -186,10 +187,11 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
                 onOpenSettings: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
+                onTabChanged: (tab) => setState(() => _selectedTab = tab),
               ),
             ),
             ChronaBottomNavigation(
-              selectedIndex: _selectedTab,
+              selectedIndex: 0,
               onTabSelected: (index) {
                 if (index == 0) {
                   _selectDate(DateTime.now());
@@ -221,39 +223,52 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
 class _TodayTabContent extends StatelessWidget {
   const _TodayTabContent({
     required this.selectedTab,
+    required this.selectedDate,
     required this.onStartFocus,
     required this.pageController,
     required this.onPageChanged,
     required this.dateForPage,
     required this.onOpenDatePicker,
     required this.onOpenSettings,
+    required this.onTabChanged,
   });
 
   final int selectedTab;
+  final DateTime selectedDate;
   final ValueChanged<Task> onStartFocus;
   final PageController pageController;
   final ValueChanged<int> onPageChanged;
   final DateTime Function(int page) dateForPage;
   final VoidCallback onOpenDatePicker;
   final VoidCallback onOpenSettings;
+  final ValueChanged<int> onTabChanged;
 
   @override
   Widget build(BuildContext context) {
-    if (selectedTab != 0) {
-      return _PlaceholderTab(title: selectedTab == 1 ? '记录' : '设置');
-    }
-    return PageView.builder(
-      controller: pageController,
-      itemCount: 40001,
-      onPageChanged: onPageChanged,
-      itemBuilder: (context, page) {
-        return _TodayHomeContent(
-          selectedDate: dateForPage(page),
-          onStartFocus: onStartFocus,
+    return IndexedStack(
+      index: selectedTab,
+      children: [
+        PageView.builder(
+          controller: pageController,
+          itemCount: 40001,
+          onPageChanged: onPageChanged,
+          itemBuilder: (context, page) {
+            return _TodayHomeContent(
+              selectedDate: dateForPage(page),
+              onStartFocus: onStartFocus,
+              onOpenDatePicker: onOpenDatePicker,
+              onOpenSettings: onOpenSettings,
+              onTabChanged: onTabChanged,
+            );
+          },
+        ),
+        _TodayDiaryContent(
+          selectedDate: selectedDate,
           onOpenDatePicker: onOpenDatePicker,
           onOpenSettings: onOpenSettings,
-        );
-      },
+          onTabChanged: onTabChanged,
+        ),
+      ],
     );
   }
 }
@@ -264,12 +279,14 @@ class _TodayHomeContent extends StatelessWidget {
     required this.onStartFocus,
     required this.onOpenDatePicker,
     required this.onOpenSettings,
+    required this.onTabChanged,
   });
 
   final DateTime selectedDate;
   final ValueChanged<Task> onStartFocus;
   final VoidCallback onOpenDatePicker;
   final VoidCallback onOpenSettings;
+  final ValueChanged<int> onTabChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -296,15 +313,16 @@ class _TodayHomeContent extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
-                BrandHeader(onSettingsPressed: onOpenSettings),
-                const SizedBox(height: 48),
-                _TodaySummary(
+                _TodayHeader(
                   selectedDate: selectedDate,
                   completedCount:
                       taskProvider.completedCountForDate(selectedDate),
                   focusDurationHours:
                       focusDurationSeconds / Duration.secondsPerHour,
                   onTap: onOpenDatePicker,
+                  selectedTab: 0,
+                  onTabChanged: onTabChanged,
+                  onOpenSettings: onOpenSettings,
                 ),
                 const SizedBox(height: 27),
               ],
@@ -409,6 +427,8 @@ class _TodayHomeContent extends StatelessWidget {
   }
 }
 
+// Kept for compatibility with the previous home layout.
+// ignore: unused_element
 class _TodaySummary extends StatelessWidget {
   const _TodaySummary({
     required this.selectedDate,
@@ -465,6 +485,477 @@ class _TodaySummary extends StatelessWidget {
           label: '专注时长 (h)',
         ),
       ],
+    );
+  }
+}
+
+class _TodayHeader extends StatelessWidget {
+  const _TodayHeader({
+    required this.selectedDate,
+    required this.completedCount,
+    required this.focusDurationHours,
+    required this.onTap,
+    required this.selectedTab,
+    required this.onTabChanged,
+    required this.onOpenSettings,
+  });
+
+  final DateTime selectedDate;
+  final int completedCount;
+  final double focusDurationHours;
+  final VoidCallback onTap;
+  final int selectedTab;
+  final ValueChanged<int> onTabChanged;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        BrandHeader(onSettingsPressed: onOpenSettings),
+        const SizedBox(height: 48),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            GestureDetector(
+              onTap: onTap,
+              child: Text(
+                _dateStatusTitle(selectedDate),
+                style: const TextStyle(
+                  color: Color(0xFF111111),
+                  fontSize: 38,
+                  height: 1.05,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Spacer(),
+            _TodayTabSwitcher(
+              selectedTab: selectedTab,
+              onChanged: onTabChanged,
+            ),
+          ],
+        ),
+        const SizedBox(height: 13),
+        _TodaySummaryLine(
+          selectedDate: selectedDate,
+          completedCount: completedCount,
+          focusDurationHours: focusDurationHours,
+          onTap: onTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayTabSwitcher extends StatelessWidget {
+  const _TodayTabSwitcher({required this.selectedTab, required this.onChanged});
+
+  final int selectedTab;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _TodayTab(
+          label: '\u4e13\u6ce8',
+          selected: selectedTab == 0,
+          onTap: () => onChanged(0),
+        ),
+        const SizedBox(width: 24),
+        _TodayTab(
+          label: '\u65e5\u8bb0',
+          selected: selectedTab == 1,
+          onTap: () => onChanged(1),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayTab extends StatelessWidget {
+  const _TodayTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFF111111) : const Color(0xFF858585);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? const Color(0xFF111111) : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 17,
+              fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TodaySummaryLine extends StatelessWidget {
+  const _TodaySummaryLine({
+    required this.selectedDate,
+    required this.completedCount,
+    required this.focusDurationHours,
+    required this.onTap,
+  });
+
+  final DateTime selectedDate;
+  final int completedCount;
+  final double focusDurationHours;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final weekday = const [
+      '\u4e00',
+      '\u4e8c',
+      '\u4e09',
+      '\u56db',
+      '\u4e94',
+      '\u516d',
+      '\u65e5',
+    ][selectedDate.weekday - 1];
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${selectedDate.month}\u6708${selectedDate.day}\u65e5\u00b7\u661f\u671f$weekday',
+            style: const TextStyle(
+              color: Color(0xFF858585),
+              fontSize: 16,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            '$completedCount \u5df2\u5b8c\u6210\u00b7'
+            '${focusDurationHours.toStringAsFixed(2)}h \u4e13\u6ce8\u65f6\u957f',
+            style: const TextStyle(
+              color: Color(0xFF858585),
+              fontSize: 16,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayDiaryContent extends StatefulWidget {
+  const _TodayDiaryContent({
+    required this.selectedDate,
+    required this.onOpenDatePicker,
+    required this.onOpenSettings,
+    required this.onTabChanged,
+  });
+
+  final DateTime selectedDate;
+  final VoidCallback onOpenDatePicker;
+  final VoidCallback onOpenSettings;
+  final ValueChanged<int> onTabChanged;
+
+  @override
+  State<_TodayDiaryContent> createState() => _TodayDiaryContentState();
+}
+
+class _TodayDiaryContentState extends State<_TodayDiaryContent> {
+  late final TextEditingController _questionController;
+  late final TextEditingController _diaryController;
+
+  @override
+  void initState() {
+    super.initState();
+    _questionController = TextEditingController();
+    _diaryController = TextEditingController();
+    _questionController.addListener(_onTextChanged);
+    _diaryController.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _questionController
+      ..removeListener(_onTextChanged)
+      ..dispose();
+    _diaryController
+      ..removeListener(_onTextChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() => setState(() {});
+
+  void _save() {
+    if (_questionController.text.trim().isEmpty &&
+        _diaryController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('\u5148\u5199\u4e0b\u4e00\u70b9\u5185\u5bb9\u5427')),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text(
+              '\u5df2\u4fdd\u5b58\uff08\u6682\u672a\u6301\u4e45\u5316\uff09')),
+    );
+  }
+
+  void _changeQuestion() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text(
+              '\u6362\u9898\u529f\u80fd\u5c06\u5728\u540e\u7eed\u5f00\u653e')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final taskProvider = context.watch<TaskProvider>();
+    final sessionProvider = context.watch<FocusSessionProvider>();
+    if (taskProvider.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 1.5,
+          color: Color(0xFF111111),
+        ),
+      );
+    }
+
+    final focusDurationSeconds =
+        sessionProvider.focusDurationSecondsForDay(widget.selectedDate);
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+          sliver: SliverToBoxAdapter(
+            child: _TodayHeader(
+              selectedDate: widget.selectedDate,
+              completedCount: taskProvider.completedCountForDate(
+                widget.selectedDate,
+              ),
+              focusDurationHours:
+                  focusDurationSeconds / Duration.secondsPerHour,
+              onTap: widget.onOpenDatePicker,
+              selectedTab: 1,
+              onTabChanged: widget.onTabChanged,
+              onOpenSettings: widget.onOpenSettings,
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 27, 24, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _DiaryCard(
+                  icon: Icons.wb_sunny_outlined,
+                  title: '\u6bcf\u65e5\u4e00\u95ee',
+                  trailing: IconButton(
+                    onPressed: _changeQuestion,
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    tooltip: '\u66f4\u6362\u95ee\u9898',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '\u201c\u5982\u679c\u6ca1\u6709\u4eba\u77e5\u9053\u4f60\u7684\u9009\u62e9\uff0c\n\u4f60\u8fd8\u4f1a\u505a\u540c\u6837\u7684\u51b3\u5b9a\u5417\uff1f\u201d',
+                        style: TextStyle(
+                          color: Color(0xFF111111),
+                          fontSize: 18,
+                          height: 1.55,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _DiaryInput(
+                        controller: _questionController,
+                        hintText:
+                            '\u5199\u4e0b\u4f60\u7684\u56de\u7b54\u2026\u2026',
+                        maxLength: 500,
+                        maxLines: 4,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DiaryCard(
+                  icon: Icons.menu_book_outlined,
+                  title: '\u4eca\u65e5\u65e5\u8bb0',
+                  child: _DiaryInput(
+                    controller: _diaryController,
+                    hintText:
+                        '\u4eca\u5929\u53d1\u751f\u4e86\u4ec0\u4e48\u2026\u2026\n\u53ef\u4ee5\u8bb0\u5f55\u4f60\u7684\u60f3\u6cd5\u3001\u60c5\u7eea\u3001\u6536\u83b7\uff0c\u6216\u4efb\u4f55\u60f3\u8bf4\u7684\u3002',
+                    maxLength: 1000,
+                    maxLines: 5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: FilledButton(
+                    onPressed: _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF111111),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      '\u4fdd\u5b58',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DiaryCard extends StatelessWidget {
+  const _DiaryCard({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 22, color: const Color(0xFF111111)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF111111),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 15),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DiaryInput extends StatelessWidget {
+  const _DiaryInput({
+    required this.controller,
+    required this.hintText,
+    required this.maxLength,
+    required this.maxLines,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final int maxLength;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(13, 10, 13, 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE1E1E1)),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          TextField(
+            controller: controller,
+            maxLength: maxLength,
+            maxLines: maxLines,
+            minLines: maxLines,
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: const TextStyle(
+                color: Color(0xFF9A9A9A),
+                fontSize: 15,
+                height: 1.45,
+              ),
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+              counterText: '',
+            ),
+            style: const TextStyle(
+              color: Color(0xFF111111),
+              fontSize: 15,
+              height: 1.45,
+            ),
+          ),
+          Text(
+            '${controller.text.length}/$maxLength',
+            style: const TextStyle(color: Color(0xFF858585), fontSize: 13),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -623,7 +1114,7 @@ String _dateStatusTitle(DateTime date) {
   final selected = startOfLocalDay(date);
   final today = startOfLocalDay(DateTime.now());
   if (selected == today) return '今朝';
-  return selected.isBefore(today) ? '往事' : '来日';
+  return selected.isBefore(today) ? '往昔' : '来生';
 }
 
 class _TaskDraft {
@@ -991,6 +1482,8 @@ class _AddTaskButton extends StatelessWidget {
   }
 }
 
+// Kept for compatibility with older navigation state.
+// ignore: unused_element
 class _PlaceholderTab extends StatelessWidget {
   const _PlaceholderTab({required this.title});
 
