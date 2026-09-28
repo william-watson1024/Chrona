@@ -51,6 +51,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
 
   int _selectedTab = 0;
   late final PageController _pageController;
+  late final PageController _diaryPageController;
   DateTime _selectedDate = startOfLocalDay(DateTime.now());
   DateTime _lastObservedToday = startOfLocalDay(DateTime.now());
   FocusProvider? _activeFocusProvider;
@@ -60,6 +61,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _pageController = PageController(initialPage: _pageAnchor);
+    _diaryPageController = PageController(initialPage: _pageAnchor);
   }
 
   @override
@@ -69,6 +71,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     provider?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
+    _diaryPageController.dispose();
     super.dispose();
   }
 
@@ -99,19 +102,25 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     if (!isSameLocalDay(_selectedDate, normalized)) {
       setState(() => _selectedDate = normalized);
     }
-    if (_pageController.hasClients && _pageController.page?.round() != page) {
-      _pageController.animateToPage(
-        page,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncPageController(_pageController, page);
+      _syncPageController(_diaryPageController, page);
+    });
   }
 
   void _handlePageChanged(int page) {
     final date = _dateForPage(page);
     if (!isSameLocalDay(_selectedDate, date)) {
       setState(() => _selectedDate = date);
+    }
+    _syncPageController(_pageController, page);
+    _syncPageController(_diaryPageController, page);
+  }
+
+  void _syncPageController(PageController controller, int page) {
+    if (controller.hasClients && controller.page?.round() != page) {
+      controller.jumpToPage(page);
     }
   }
 
@@ -181,6 +190,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
                 selectedDate: _selectedDate,
                 onStartFocus: _openFocus,
                 pageController: _pageController,
+                diaryPageController: _diaryPageController,
                 onPageChanged: _handlePageChanged,
                 dateForPage: _dateForPage,
                 onOpenDatePicker: _openDatePicker,
@@ -188,6 +198,8 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
                 onTabChanged: (tab) => setState(() => _selectedTab = tab),
+                onGoToLastYear: () =>
+                    _selectDate(_sameDayLastYear(_selectedDate)),
               ),
             ),
             ChronaBottomNavigation(
@@ -226,22 +238,26 @@ class _TodayTabContent extends StatelessWidget {
     required this.selectedDate,
     required this.onStartFocus,
     required this.pageController,
+    required this.diaryPageController,
     required this.onPageChanged,
     required this.dateForPage,
     required this.onOpenDatePicker,
     required this.onOpenSettings,
     required this.onTabChanged,
+    required this.onGoToLastYear,
   });
 
   final int selectedTab;
   final DateTime selectedDate;
   final ValueChanged<Task> onStartFocus;
   final PageController pageController;
+  final PageController diaryPageController;
   final ValueChanged<int> onPageChanged;
   final DateTime Function(int page) dateForPage;
   final VoidCallback onOpenDatePicker;
   final VoidCallback onOpenSettings;
   final ValueChanged<int> onTabChanged;
+  final VoidCallback onGoToLastYear;
 
   @override
   Widget build(BuildContext context) {
@@ -262,11 +278,19 @@ class _TodayTabContent extends StatelessWidget {
             );
           },
         ),
-        _TodayDiaryContent(
-          selectedDate: selectedDate,
-          onOpenDatePicker: onOpenDatePicker,
-          onOpenSettings: onOpenSettings,
-          onTabChanged: onTabChanged,
+        PageView.builder(
+          controller: diaryPageController,
+          itemCount: 40001,
+          onPageChanged: onPageChanged,
+          itemBuilder: (context, page) {
+            return _TodayDiaryContent(
+              selectedDate: dateForPage(page),
+              onOpenDatePicker: onOpenDatePicker,
+              onOpenSettings: onOpenSettings,
+              onTabChanged: onTabChanged,
+              onGoToLastYear: onGoToLastYear,
+            );
+          },
         ),
       ],
     );
@@ -675,12 +699,14 @@ class _TodayDiaryContent extends StatefulWidget {
     required this.onOpenDatePicker,
     required this.onOpenSettings,
     required this.onTabChanged,
+    required this.onGoToLastYear,
   });
 
   final DateTime selectedDate;
   final VoidCallback onOpenDatePicker;
   final VoidCallback onOpenSettings;
   final ValueChanged<int> onTabChanged;
+  final VoidCallback onGoToLastYear;
 
   @override
   State<_TodayDiaryContent> createState() => _TodayDiaryContentState();
@@ -819,6 +845,18 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                         '\u4eca\u5929\u53d1\u751f\u4e86\u4ec0\u4e48\u2026\u2026\n\u53ef\u4ee5\u8bb0\u5f55\u4f60\u7684\u60f3\u6cd5\u3001\u60c5\u7eea\u3001\u6536\u83b7\uff0c\u6216\u4efb\u4f55\u60f3\u8bf4\u7684\u3002',
                     maxLength: 1000,
                     maxLines: 5,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: widget.onGoToLastYear,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF555555),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                    icon: const Icon(Icons.history_outlined, size: 18),
+                    label: const Text('\u53bb\u5e74\u4eca\u65e5'),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -992,6 +1030,10 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
     Navigator.of(context).pop(startOfLocalDay(DateTime.now()));
   }
 
+  void _returnToLastYear() {
+    Navigator.of(context).pop(_sameDayLastYear(_selectedDate));
+  }
+
   void _confirm() {
     if (_inputMode && !(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -1091,6 +1133,10 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
+                        onPressed: _returnToLastYear,
+                        child: const Text('\u53bb\u5e74\u4eca\u65e5'),
+                      ),
+                      TextButton(
                         onPressed: _returnToToday,
                         child: const Text('回到今朝'),
                       ),
@@ -1108,6 +1154,13 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
       ),
     );
   }
+}
+
+DateTime _sameDayLastYear(DateTime date) {
+  final year = date.year - 1;
+  final lastDayOfMonth = DateTime(year, date.month + 1, 0).day;
+  final day = date.day > lastDayOfMonth ? lastDayOfMonth : date.day;
+  return DateTime(year, date.month, day);
 }
 
 String _dateStatusTitle(DateTime date) {
