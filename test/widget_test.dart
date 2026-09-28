@@ -146,7 +146,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('新任务'), findsOneWidget);
-    expect(find.text('一条备注'), findsOneWidget);
+    expect(find.text('25m'), findsNWidgets(2));
+    expect(find.byIcon(Icons.schedule_outlined), findsNWidgets(2));
   });
 
   testWidgets('short focus session finishes and opens the note screen',

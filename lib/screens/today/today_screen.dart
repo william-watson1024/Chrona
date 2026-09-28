@@ -573,11 +573,11 @@ class _TaskRow extends StatelessWidget {
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      const Icon(Icons.notes_outlined,
+                      const Icon(Icons.schedule_outlined,
                           size: 18, color: Color(0xFF8A8A8A)),
                       const SizedBox(width: 7),
                       Flexible(
-                          child: Text(task.note ?? '',
+                          child: Text(_formatTaskDuration(task.durationSeconds),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -590,12 +590,6 @@ class _TaskRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 9),
-          Opacity(
-              opacity: task.completed ? 0.65 : 1,
-              child: Text(_formatTaskDuration(task.durationSeconds),
-                  style: const TextStyle(
-                      color: Color(0xFF858585), fontSize: 16, height: 1.1))),
           const SizedBox(width: 17),
           IconButton(
             onPressed: onDelete,
@@ -613,23 +607,23 @@ class _TaskRow extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
-String _legacyMockFocusDuration(Task task) {
-  const fiftyMinuteTasks = {'写 RagForge', '健身', '看技术分享'};
-  return fiftyMinuteTasks.contains(task.title) ? '50 min' : '25 min';
-}
-
 String _formatTaskDuration(int seconds) {
-  final hours = seconds ~/ 3600;
-  final minutes = (seconds % 3600) ~/ 60;
-  final remainingSeconds = seconds % 60;
+  final safeSeconds = seconds < 0 ? 0 : seconds;
+  final hours = safeSeconds ~/ 3600;
+  final minutes = (safeSeconds % 3600) ~/ 60;
+  final remainingSeconds = safeSeconds % 60;
   if (hours > 0) {
-    return '$hours h ${minutes.toString().padLeft(2, '0')} min';
+    final result = StringBuffer('${hours}h');
+    if (minutes > 0) result.write('${minutes}m');
+    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
+    return result.toString();
   }
-  if (remainingSeconds > 0) {
-    return '$minutes min ${remainingSeconds.toString().padLeft(2, '0')} sec';
+  if (minutes > 0) {
+    final result = StringBuffer('${minutes}m');
+    if (remainingSeconds > 0) result.write('${remainingSeconds}s');
+    return result.toString();
   }
-  return '$minutes min';
+  return remainingSeconds > 0 ? '${remainingSeconds}s' : '';
 }
 
 class _CompletionButton extends StatelessWidget {
