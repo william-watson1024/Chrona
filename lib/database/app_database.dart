@@ -19,7 +19,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     _database = await openDatabase(
       databasePath,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -29,7 +29,8 @@ class AppDatabase {
             completed INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             completed_at INTEGER,
-            duration_seconds INTEGER NOT NULL DEFAULT 900
+            duration_seconds INTEGER NOT NULL DEFAULT 900,
+            plan_date INTEGER NOT NULL
           )
         ''');
 
@@ -44,6 +45,26 @@ class AppDatabase {
         }
         if (oldVersion < 3) {
           await _createFocusSessionTable(db);
+        }
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE task ADD COLUMN plan_date INTEGER');
+          final rows = await db.query(
+            'task',
+            columns: ['id', 'created_at'],
+          );
+          for (final row in rows) {
+            final createdAt =
+                DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int);
+            final planDate =
+                DateTime(createdAt.year, createdAt.month, createdAt.day)
+                    .millisecondsSinceEpoch;
+            await db.update(
+              'task',
+              {'plan_date': planDate},
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+          }
         }
       },
     );
@@ -126,6 +147,7 @@ class AppDatabase {
 
   Future<void> _insertInitialTasks(Database db) async {
     final createdAt = DateTime.now().millisecondsSinceEpoch;
+    final createdDate = DateTime.fromMillisecondsSinceEpoch(createdAt);
     final initialTasks = [
       {'title': '阅读 Orca 论文', 'note': '继续看 Section 3', 'completed': 0},
       {'title': '写 RagForge', 'note': '实现文档解析接口', 'completed': 0},
@@ -141,6 +163,9 @@ class AppDatabase {
         ...initialTask,
         'created_at': createdAt - index,
         'duration_seconds': index.isEven ? 25 * 60 : 50 * 60,
+        'plan_date':
+            DateTime(createdDate.year, createdDate.month, createdDate.day)
+                .millisecondsSinceEpoch,
         'completed_at':
             initialTask['completed'] == 1 ? createdAt - index : null,
       });

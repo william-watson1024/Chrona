@@ -40,16 +40,88 @@ class _TodayScreenContent extends StatefulWidget {
   State<_TodayScreenContent> createState() => _TodayScreenContentState();
 }
 
-class _TodayScreenContentState extends State<_TodayScreenContent> {
+class _TodayScreenContentState extends State<_TodayScreenContent>
+    with WidgetsBindingObserver {
+  static const int _pageAnchor = 20000;
+  static final DateTime _anchorDate = DateTime.utc(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
+
   int _selectedTab = 0;
+  late final PageController _pageController;
+  DateTime _selectedDate = startOfLocalDay(DateTime.now());
+  DateTime _lastObservedToday = startOfLocalDay(DateTime.now());
   FocusProvider? _activeFocusProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pageController = PageController(initialPage: _pageAnchor);
+  }
 
   @override
   void dispose() {
     final provider = _activeFocusProvider;
     provider?.removeListener(_handleActiveFocusChanged);
     provider?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final today = startOfLocalDay(DateTime.now());
+    final wasBrowsingToday = isSameLocalDay(_selectedDate, _lastObservedToday);
+    _lastObservedToday = today;
+    if (wasBrowsingToday) _selectDate(today);
+  }
+
+  DateTime _dateForPage(int page) {
+    final utcDate = _anchorDate.add(
+      Duration(days: page - _pageAnchor),
+    );
+    return DateTime(utcDate.year, utcDate.month, utcDate.day);
+  }
+
+  int _pageForDate(DateTime date) {
+    final utcDate = DateTime.utc(date.year, date.month, date.day);
+    return _pageAnchor + utcDate.difference(_anchorDate).inDays;
+  }
+
+  void _selectDate(DateTime date) {
+    final normalized = startOfLocalDay(date);
+    final page = _pageForDate(normalized);
+    if (!isSameLocalDay(_selectedDate, normalized)) {
+      setState(() => _selectedDate = normalized);
+    }
+    if (_pageController.hasClients && _pageController.page?.round() != page) {
+      _pageController.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _handlePageChanged(int page) {
+    final date = _dateForPage(page);
+    if (!isSameLocalDay(_selectedDate, date)) {
+      setState(() => _selectedDate = date);
+    }
+  }
+
+  Future<void> _openDatePicker() async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CompactDatePickerDialog(initialDate: _selectedDate),
+    );
+    if (picked != null && mounted) _selectDate(picked);
   }
 
   void _openFocus(Task task) {
@@ -107,6 +179,10 @@ class _TodayScreenContentState extends State<_TodayScreenContent> {
               child: _TodayTabContent(
                 selectedTab: _selectedTab,
                 onStartFocus: _openFocus,
+                pageController: _pageController,
+                onPageChanged: _handlePageChanged,
+                dateForPage: _dateForPage,
+                onOpenDatePicker: _openDatePicker,
               ),
             ),
             ChronaBottomNavigation(
@@ -138,24 +214,49 @@ class _TodayTabContent extends StatelessWidget {
   const _TodayTabContent({
     required this.selectedTab,
     required this.onStartFocus,
+    required this.pageController,
+    required this.onPageChanged,
+    required this.dateForPage,
+    required this.onOpenDatePicker,
   });
 
   final int selectedTab;
   final ValueChanged<Task> onStartFocus;
+  final PageController pageController;
+  final ValueChanged<int> onPageChanged;
+  final DateTime Function(int page) dateForPage;
+  final VoidCallback onOpenDatePicker;
 
   @override
   Widget build(BuildContext context) {
     if (selectedTab != 0) {
       return _PlaceholderTab(title: selectedTab == 1 ? '记录' : '设置');
     }
-    return _TodayHomeContent(onStartFocus: onStartFocus);
+    return PageView.builder(
+      controller: pageController,
+      itemCount: 40001,
+      onPageChanged: onPageChanged,
+      itemBuilder: (context, page) {
+        return _TodayHomeContent(
+          selectedDate: dateForPage(page),
+          onStartFocus: onStartFocus,
+          onOpenDatePicker: onOpenDatePicker,
+        );
+      },
+    );
   }
 }
 
 class _TodayHomeContent extends StatelessWidget {
-  const _TodayHomeContent({required this.onStartFocus});
+  const _TodayHomeContent({
+    required this.selectedDate,
+    required this.onStartFocus,
+    required this.onOpenDatePicker,
+  });
 
+  final DateTime selectedDate;
   final ValueChanged<Task> onStartFocus;
+  final VoidCallback onOpenDatePicker;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +271,10 @@ class _TodayHomeContent extends StatelessWidget {
       );
     }
 
+    final tasks = taskProvider.tasksForDate(selectedDate);
+    final focusDurationSeconds =
+        focusSessionProvider.focusDurationSecondsForDay(selectedDate);
+
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
@@ -181,9 +286,12 @@ class _TodayHomeContent extends StatelessWidget {
                 const BrandHeader(),
                 const SizedBox(height: 48),
                 _TodaySummary(
-                  completedCount: taskProvider.completedCount,
+                  selectedDate: selectedDate,
+                  completedCount:
+                      taskProvider.completedCountForDate(selectedDate),
                   focusDurationHours:
-                      focusSessionProvider.todayFocusDurationHours,
+                      focusDurationSeconds / Duration.secondsPerHour,
+                  onTap: onOpenDatePicker,
                 ),
                 const SizedBox(height: 27),
               ],
@@ -195,7 +303,7 @@ class _TodayHomeContent extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
-                for (final task in taskProvider.tasks)
+                for (final task in tasks)
                   _TaskRow(
                     task: task,
                     onToggle: () => taskProvider.toggleTask(task),
@@ -226,6 +334,7 @@ class _TodayHomeContent extends StatelessWidget {
             title: draft.title,
             note: draft.note,
             durationSeconds: draft.durationSeconds,
+            planDate: selectedDate,
           );
     }
   }
@@ -261,12 +370,16 @@ class _TodayHomeContent extends StatelessWidget {
 
 class _TodaySummary extends StatelessWidget {
   const _TodaySummary({
+    required this.selectedDate,
     required this.completedCount,
     required this.focusDurationHours,
+    required this.onTap,
   });
 
+  final DateTime selectedDate;
   final int completedCount;
   final double focusDurationHours;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -274,27 +387,30 @@ class _TodaySummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('今天',
-                  style: TextStyle(
-                      color: Color(0xFF111111),
-                      fontSize: 38,
-                      height: 1.05,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 13),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(formatFocusDate(DateTime.now()),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_dateStatusTitle(selectedDate),
                     style: const TextStyle(
-                        color: Color(0xFF8B8B8B),
-                        fontSize: 15,
-                        height: 1.1,
-                        letterSpacing: 0)),
-              ),
-            ],
+                        color: Color(0xFF111111),
+                        fontSize: 38,
+                        height: 1.05,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 13),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(formatFocusDate(selectedDate),
+                      style: const TextStyle(
+                          color: Color(0xFF8B8B8B),
+                          fontSize: 15,
+                          height: 1.1,
+                          letterSpacing: 0)),
+                ),
+              ],
+            ),
           ),
         ),
         _StatBlock(value: '$completedCount', label: '已完成'),
@@ -310,6 +426,163 @@ class _TodaySummary extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CompactDatePickerDialog extends StatefulWidget {
+  const _CompactDatePickerDialog({required this.initialDate});
+
+  final DateTime initialDate;
+
+  @override
+  State<_CompactDatePickerDialog> createState() =>
+      _CompactDatePickerDialogState();
+}
+
+class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
+  static final DateTime _firstDate = DateTime(2000);
+  static final DateTime _lastDate = DateTime(2100, 12, 31);
+
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late DateTime _selectedDate;
+  bool _inputMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = startOfLocalDay(widget.initialDate);
+  }
+
+  void _selectInputDate(DateTime value) {
+    setState(() => _selectedDate = startOfLocalDay(value));
+  }
+
+  void _returnToToday() {
+    Navigator.of(context).pop(startOfLocalDay(DateTime.now()));
+  }
+
+  void _confirm() {
+    if (_inputMode && !(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+    _formKey.currentState?.save();
+    Navigator.of(context).pop(_selectedDate);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const colorScheme = ColorScheme.light(
+      primary: Color(0xFF111111),
+      onPrimary: Colors.white,
+      surface: Colors.white,
+      onSurface: Color(0xFF111111),
+    );
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: colorScheme,
+        datePickerTheme: const DatePickerThemeData(
+          headerBackgroundColor: Colors.white,
+          headerForegroundColor: Color(0xFF111111),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(4)),
+          ),
+        ),
+      ),
+      child: Dialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(4)),
+        ),
+        child: SizedBox(
+          width: 360,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          formatFocusDate(_selectedDate),
+                          style: const TextStyle(
+                            color: Color(0xFF111111),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: _inputMode ? '日历' : '输入日期',
+                        onPressed: () => setState(
+                          () => _inputMode = !_inputMode,
+                        ),
+                        icon: Icon(
+                          _inputMode
+                              ? Icons.calendar_today_outlined
+                              : Icons.edit_outlined,
+                          color: const Color(0xFF111111),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_inputMode)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                    child: Form(
+                      key: _formKey,
+                      child: InputDatePickerFormField(
+                        initialDate: _selectedDate,
+                        firstDate: _firstDate,
+                        lastDate: _lastDate,
+                        autofocus: true,
+                        onDateSubmitted: _selectInputDate,
+                        onDateSaved: _selectInputDate,
+                      ),
+                    ),
+                  )
+                else
+                  CalendarDatePicker(
+                    initialDate: _selectedDate,
+                    firstDate: _firstDate,
+                    lastDate: _lastDate,
+                    currentDate: DateTime.now(),
+                    onDateChanged: _selectInputDate,
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: _returnToToday,
+                        child: const Text('回到今朝'),
+                      ),
+                      TextButton(
+                        onPressed: _confirm,
+                        child: const Text('转赴其时'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _dateStatusTitle(DateTime date) {
+  final selected = startOfLocalDay(date);
+  final today = startOfLocalDay(DateTime.now());
+  if (selected == today) return '今朝';
+  return selected.isBefore(today) ? '往事' : '来日';
 }
 
 class _TaskDraft {

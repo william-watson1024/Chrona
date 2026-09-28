@@ -7,6 +7,7 @@ class Task {
     required this.createdAt,
     this.completedAt,
     this.durationSeconds = 25 * 60,
+    this.planDate,
   });
 
   final int? id;
@@ -16,6 +17,11 @@ class Task {
   final int createdAt;
   final int? completedAt;
   final int durationSeconds;
+  final DateTime? planDate;
+
+  DateTime get effectivePlanDate => startOfDay(
+        planDate ?? DateTime.fromMillisecondsSinceEpoch(createdAt),
+      );
 
   factory Task.fromMap(Map<String, Object?> map) {
     return Task(
@@ -26,6 +32,9 @@ class Task {
       createdAt: map['created_at'] as int,
       completedAt: map['completed_at'] as int?,
       durationSeconds: map['duration_seconds'] as int? ?? 25 * 60,
+      planDate: map['plan_date'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(map['plan_date'] as int),
     );
   }
 
@@ -38,6 +47,7 @@ class Task {
       'created_at': createdAt,
       'completed_at': completedAt,
       'duration_seconds': durationSeconds,
+      'plan_date': effectivePlanDate.millisecondsSinceEpoch,
     };
   }
 
@@ -49,6 +59,7 @@ class Task {
     int? createdAt,
     int? completedAt,
     int? durationSeconds,
+    DateTime? planDate,
     bool clearCompletedAt = false,
   }) {
     return Task(
@@ -59,6 +70,12 @@ class Task {
       createdAt: createdAt ?? this.createdAt,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       durationSeconds: durationSeconds ?? this.durationSeconds,
+      planDate: planDate ?? this.planDate,
     );
   }
+}
+
+DateTime startOfDay(DateTime date) {
+  final local = date.toLocal();
+  return DateTime(local.year, local.month, local.day);
 }

@@ -25,6 +25,15 @@ DateTime startOfFocusWeek(DateTime date) {
   return day.subtract(Duration(days: day.weekday - DateTime.monday));
 }
 
+DateTime startOfLocalDay(DateTime date) {
+  final local = date.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
+
+bool isSameLocalDay(DateTime first, DateTime second) {
+  return startOfLocalDay(first) == startOfLocalDay(second);
+}
+
 String formatFocusDate(DateTime date) {
   const weekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
   return '${date.month}月${date.day}日·星期${weekdays[date.weekday - 1]}';

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../database/app_database.dart';
 import '../models/focus_session.dart';
+import '../utils/focus_formatters.dart';
 
 class FocusSessionProvider extends ChangeNotifier {
   FocusSessionProvider({AppDatabase? database})
@@ -26,19 +27,20 @@ class FocusSessionProvider extends ChangeNotifier {
   bool get isSaving => _isSaving;
 
   double get todayFocusDurationHours {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final tomorrowStart = todayStart.add(const Duration(days: 1));
-    final todaySessions = _sessions.where((session) {
-      return !session.startedAt.isBefore(todayStart) &&
-          session.startedAt.isBefore(tomorrowStart);
-    });
+    return focusDurationSecondsForDay(DateTime.now()) / Duration.secondsPerHour;
+  }
 
-    var actualSeconds = 0;
-    for (final session in todaySessions) {
-      actualSeconds += session.actualDurationSeconds;
-    }
-    return actualSeconds / Duration.secondsPerHour;
+  int focusDurationSecondsForDay(DateTime date) {
+    return sessionsForDay(date).fold<int>(
+      0,
+      (total, session) => total + session.actualDurationSeconds,
+    );
+  }
+
+  int completedFocusCountForDay(DateTime date) {
+    return sessionsForDay(date)
+        .where((session) => session.status == FocusSessionStatus.completed)
+        .length;
   }
 
   List<FocusSession> sessionsBetween(DateTime start, DateTime end) {
@@ -50,8 +52,12 @@ class FocusSessionProvider extends ChangeNotifier {
   }
 
   List<FocusSession> sessionsForDay(DateTime date) {
-    final start = DateTime(date.year, date.month, date.day);
-    return sessionsBetween(start, start.add(const Duration(days: 1)));
+    final start = startOfLocalDay(date);
+    final end = start.add(const Duration(days: 1));
+    return _sessions.where((session) {
+      final localStartedAt = session.startedAt.toLocal();
+      return !localStartedAt.isBefore(start) && localStartedAt.isBefore(end);
+    }).toList(growable: false);
   }
 
   Future<void> loadSessions() async {

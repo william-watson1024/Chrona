@@ -10,7 +10,11 @@ class TaskProvider extends ChangeNotifier {
 
   TaskProvider.inMemory(List<Task> tasks)
       : _database = AppDatabase.instance,
-        _tasks = List<Task>.from(tasks),
+        _tasks = tasks
+            .map((task) => task.planDate == null
+                ? task.copyWith(planDate: startOfDay(DateTime.now()))
+                : task)
+            .toList(),
         _isLoaded = true,
         _isInMemory = true;
 
@@ -23,6 +27,17 @@ class TaskProvider extends ChangeNotifier {
   List<Task> get tasks => List.unmodifiable(_tasks);
   bool get isLoading => !_isLoaded;
   int get completedCount => _tasks.where((task) => task.completed).length;
+
+  List<Task> tasksForDate(DateTime date) {
+    final day = startOfDay(date);
+    return _tasks
+        .where((task) => task.effectivePlanDate == day)
+        .toList(growable: false);
+  }
+
+  int completedCountForDate(DateTime date) {
+    return tasksForDate(date).where((task) => task.completed).length;
+  }
 
   Future<void> loadTasks() async {
     if (_isLoaded || _isInMemory) return;
@@ -42,6 +57,7 @@ class TaskProvider extends ChangeNotifier {
     required String title,
     String? note,
     int durationSeconds = 15 * 60,
+    DateTime? planDate,
   }) async {
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) return;
@@ -52,6 +68,7 @@ class TaskProvider extends ChangeNotifier {
       completed: false,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       durationSeconds: durationSeconds,
+      planDate: startOfDay(planDate ?? DateTime.now()),
     );
     final savedTask = _isInMemory
         ? task.copyWith(id: _nextInMemoryId--)
