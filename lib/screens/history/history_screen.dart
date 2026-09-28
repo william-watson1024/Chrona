@@ -934,28 +934,39 @@ class _EmptyHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '\u6682\u65e0\u8bb0\u5f55',
-          style: TextStyle(
-            color: Color(0xFF111111),
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 44),
+          Image.asset(
+            'assets/icon/image.png',
+            width: 88,
+            height: 88,
+            fit: BoxFit.contain,
           ),
-        ),
-        SizedBox(height: 8),
-        Text(
-          '\u8fd9\u4e00\u65f6\u95f4\u6bb5\u8fd8\u6ca1\u6709\u4e13\u6ce8\u8bb0\u5f55',
-          style: TextStyle(color: Color(0xFF858585), fontSize: 16),
-        ),
-        SizedBox(height: 6),
-        Text(
-          '\u5f00\u59cb\u4e13\u6ce8\uff0c\u8bb0\u5f55\u4f60\u7684\u65f6\u95f4\u5427',
-          style: TextStyle(color: Color(0xFF858585), fontSize: 16),
-        ),
-      ],
+          const SizedBox(height: 12),
+          const Text(
+            '\u6682\u65e0\u8bb0\u5f55',
+            style: TextStyle(
+              color: Color(0xFF111111),
+              fontSize: 24,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '\u8fd9\u4e00\u65f6\u95f4\u6bb5\u8fd8\u6ca1\u6709\u4e13\u6ce8\u8bb0\u5f55',
+            style: TextStyle(color: Color(0xFF858585), fontSize: 16),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '\u5f00\u59cb\u4e13\u6ce8\uff0c\u8bb0\u5f55\u4f60\u7684\u65f6\u95f4\u5427',
+            style: TextStyle(color: Color(0xFF858585), fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 }
