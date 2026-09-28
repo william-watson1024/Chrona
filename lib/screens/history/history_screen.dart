@@ -316,6 +316,7 @@ class _WeekBar extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPress: onTap,
       child: Column(
         children: [
           Expanded(

@@ -23,12 +23,8 @@ String formatFocusDuration(int seconds) {
 }
 
 String formatFocusHoursMinutes(int seconds) {
-  final safeSeconds = seconds < 0 ? 0 : seconds;
-  final hours = safeSeconds ~/ Duration.secondsPerHour;
-  final minutes = (safeSeconds % Duration.secondsPerHour) ~/ 60;
-  if (hours == 0) return '${minutes}m';
-  if (minutes == 0) return '${hours}h';
-  return '${hours}h${minutes}m';
+  final formatted = formatFocusDuration(seconds);
+  return formatted.isEmpty ? '0m' : formatted;
 }
 
 DateTime startOfFocusWeek(DateTime date) {
