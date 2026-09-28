@@ -38,11 +38,13 @@ class _HistoryContent extends StatefulWidget {
 class _HistoryContentState extends State<_HistoryContent> {
   _HistoryGranularity _granularity = _HistoryGranularity.week;
   DateTime _periodAnchor = _dateOnly(DateTime.now());
+  DateTime? _selectedMonthDay;
 
   void _selectGranularity(_HistoryGranularity value) {
     setState(() {
       _granularity = value;
       _periodAnchor = _dateOnly(DateTime.now());
+      _selectedMonthDay = null;
     });
   }
 
@@ -60,6 +62,7 @@ class _HistoryContentState extends State<_HistoryContent> {
         case _HistoryGranularity.year:
           _periodAnchor = DateTime(_periodAnchor.year + amount, 1, 1);
       }
+      _selectedMonthDay = null;
     });
   }
 
@@ -67,7 +70,12 @@ class _HistoryContentState extends State<_HistoryContent> {
     setState(() {
       _granularity = _HistoryGranularity.month;
       _periodAnchor = DateTime(month.year, month.month, 1);
+      _selectedMonthDay = null;
     });
+  }
+
+  void _selectMonthDay(DateTime date) {
+    setState(() => _selectedMonthDay = _dateOnly(date));
   }
 
   @override
@@ -89,7 +97,8 @@ class _HistoryContentState extends State<_HistoryContent> {
                     );
                   }
 
-                  final sessions = _sessionsForPeriod(provider.sessions);
+                  final periodSessions = _sessionsForPeriod(provider.sessions);
+                  final sessions = _sessionsForList(periodSessions);
                   final groups = _groupSessions(sessions);
 
                   return ListView(
@@ -106,16 +115,26 @@ class _HistoryContentState extends State<_HistoryContent> {
                       const SizedBox(height: 30),
                       _PeriodSelector(
                         title: _periodTitle(),
+                        subtitle: _periodSubtitle(),
                         onPrevious: () => _movePeriod(-1),
                         onNext: () => _movePeriod(1),
                         onSelected: _selectGranularity,
                       ),
                       const SizedBox(height: 32),
-                      _buildPeriodView(sessions),
+                      _buildPeriodView(periodSessions),
                       if (_granularity != _HistoryGranularity.year) ...[
                         const SizedBox(height: 36),
                         const Divider(color: Color(0xFFE4E4E4)),
                         const SizedBox(height: 34),
+                        const Text(
+                          '\u4e13\u6ce8\u8bb0\u5f55',
+                          style: TextStyle(
+                            color: Color(0xFF111111),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
                         if (groups.isEmpty)
                           const _EmptyHistory()
                         else
@@ -173,9 +192,8 @@ class _HistoryContentState extends State<_HistoryContent> {
         return _MonthOverview(
           month: _periodStart,
           sessions: sessions,
-          onDayTap: (date) => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => DayDetailScreen(date: date)),
-          ),
+          selectedDay: _selectedMonthDay,
+          onDayTap: _selectMonthDay,
         );
       case _HistoryGranularity.year:
         return _YearOverview(
@@ -219,22 +237,37 @@ class _HistoryContentState extends State<_HistoryContent> {
     return result;
   }
 
+  List<FocusSession> _sessionsForList(List<FocusSession> sessions) {
+    if (_granularity != _HistoryGranularity.month ||
+        _selectedMonthDay == null) {
+      return sessions;
+    }
+    final selectedDay = _selectedMonthDay!;
+    return sessions
+        .where((session) => isSameLocalDay(session.startedAt, selectedDay))
+        .toList(growable: false);
+  }
+
   String _periodTitle() {
-    final now = DateTime.now();
     switch (_granularity) {
       case _HistoryGranularity.week:
-        final start = _periodStart;
-        if (start == startOfFocusWeek(now)) return '\u672c\u5468';
-        final end = start.add(const Duration(days: 6));
-        return '${start.month}\u6708${start.day}\u65e5 - '
+        return '\u5468';
+      case _HistoryGranularity.month:
+        return '\u6708';
+      case _HistoryGranularity.year:
+        return '\u5e74';
+    }
+  }
+
+  String _periodSubtitle() {
+    switch (_granularity) {
+      case _HistoryGranularity.week:
+        final end = _periodStart.add(const Duration(days: 6));
+        return '${_periodStart.month}\u6708${_periodStart.day}\u65e5 - '
             '${end.month}\u6708${end.day}\u65e5';
       case _HistoryGranularity.month:
-        if (_periodStart.year == now.year && _periodStart.month == now.month) {
-          return '\u672c\u6708';
-        }
         return '${_periodStart.year}\u5e74${_periodStart.month}\u6708';
       case _HistoryGranularity.year:
-        if (_periodStart.year == now.year) return '\u672c\u5e74';
         return '${_periodStart.year}\u5e74';
     }
   }
@@ -264,12 +297,14 @@ class _HistoryContentState extends State<_HistoryContent> {
 class _PeriodSelector extends StatelessWidget {
   const _PeriodSelector({
     required this.title,
+    required this.subtitle,
     required this.onPrevious,
     required this.onNext,
     required this.onSelected,
   });
 
   final String title;
+  final String subtitle;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final ValueChanged<_HistoryGranularity> onSelected;
@@ -307,19 +342,36 @@ class _PeriodSelector extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFF111111),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Color(0xFF111111),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          const Icon(Icons.keyboard_arrow_down, size: 19),
+                        ],
                       ),
-                      const SizedBox(width: 3),
-                      const Icon(Icons.keyboard_arrow_down, size: 19),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Color(0xFF858585),
+                            fontSize: 14,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -366,15 +418,7 @@ class _WeekSummary {
 
   int get totalSeconds => daySeconds.fold(0, (total, value) => total + value);
   int get count => sessions.length;
-  int get averageSeconds => totalSeconds ~/ 7;
-
-  int get longestDayIndex {
-    var index = 0;
-    for (var current = 1; current < daySeconds.length; current++) {
-      if (daySeconds[current] > daySeconds[index]) index = current;
-    }
-    return index;
-  }
+  double get averageSeconds => totalSeconds / 7;
 
   DateTime dateAt(int index) => weekStart.add(Duration(days: index));
 }
@@ -387,23 +431,14 @@ class _WeekOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final longestSeconds = summary.daySeconds[summary.longestDayIndex];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _WeekStat(
-                value: formatFocusHoursMinutes(summary.totalSeconds),
-                label: '\u4e13\u6ce8\u65f6\u957f',
-              ),
-            ),
-            const SizedBox(width: 25),
-            _WeekStat(
-                value: '${summary.count}', label: '\u4e13\u6ce8\u6b21\u6570'),
-          ],
+        _PeriodTotals(
+          totalSeconds: summary.totalSeconds,
+          count: summary.count,
+          averageSeconds: summary.averageSeconds,
+          averageLabel: '\u65e5\u5747\u65f6\u957f',
         ),
         const SizedBox(height: 39),
         SizedBox(
@@ -422,42 +457,9 @@ class _WeekOverview extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 28),
-        Row(
-          children: [
-            Expanded(
-              child: _WeekStat(
-                value: formatFocusHoursMinutes(summary.averageSeconds),
-                label: '\u5e73\u5747\u6bcf\u5929',
-              ),
-            ),
-            Container(width: 1, height: 54, color: const Color(0xFFE4E4E4)),
-            Expanded(
-              child: _WeekStat(
-                value: summary.count == 0
-                    ? '\u6682\u65e0'
-                    : '${_weekday(summary.longestDayIndex)} · '
-                        '${formatFocusHoursMinutes(longestSeconds)}',
-                label: summary.count == 0
-                    ? '\u672c\u5468\u6682\u65e0\u8bb0\u5f55'
-                    : '\u6700\u957f\u4e00\u5929',
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
-
-  String _weekday(int index) => const [
-        '\u5468\u4e00',
-        '\u5468\u4e8c',
-        '\u5468\u4e09',
-        '\u5468\u56db',
-        '\u5468\u4e94',
-        '\u5468\u516d',
-        '\u5468\u65e5',
-      ][index];
 }
 
 class _WeekBar extends StatelessWidget {
@@ -537,46 +539,17 @@ class _WeekBar extends StatelessWidget {
       ][weekday - 1];
 }
 
-class _WeekStat extends StatelessWidget {
-  const _WeekStat({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Color(0xFF111111),
-            fontSize: 27,
-            height: 1.05,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 9),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFF858585), fontSize: 16),
-        ),
-      ],
-    );
-  }
-}
-
 class _MonthOverview extends StatelessWidget {
   const _MonthOverview({
     required this.month,
     required this.sessions,
+    required this.selectedDay,
     required this.onDayTap,
   });
 
   final DateTime month;
   final List<FocusSession> sessions;
+  final DateTime? selectedDay;
   final ValueChanged<DateTime> onDayTap;
 
   @override
@@ -604,8 +577,23 @@ class _MonthOverview extends StatelessWidget {
             (total, session) => total + session.actualDurationSeconds,
           ),
           count: sessions.length,
+          averageSeconds: sessions.fold(
+                0,
+                (total, session) => total + session.actualDurationSeconds,
+              ) /
+              daysInMonth,
+          averageLabel: '\u65e5\u5747\u65f6\u957f',
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 28),
+        Text(
+          '${month.year}\u5e74${month.month}\u6708',
+          style: const TextStyle(
+            color: Color(0xFF111111),
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 18),
         const Row(
           children: [
             _CalendarWeekday(label: '\u4e00'),
@@ -637,6 +625,8 @@ class _MonthOverview extends StatelessWidget {
               label: '$day',
               seconds: seconds,
               maxSeconds: maxSeconds,
+              selected:
+                  selectedDay != null && isSameLocalDay(selectedDay!, date),
               onTap: () => onDayTap(date),
             );
           },
@@ -675,6 +665,20 @@ class _YearOverview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _PeriodTotals(
+          totalSeconds: sessions.fold(
+            0,
+            (total, session) => total + session.actualDurationSeconds,
+          ),
+          count: sessions.length,
+          averageSeconds: sessions.fold(
+                0,
+                (total, session) => total + session.actualDurationSeconds,
+              ) /
+              12,
+          averageLabel: '\u6708\u5747\u65f6\u957f',
+        ),
+        const SizedBox(height: 30),
         for (var row = 0; row < 4; row++) ...[
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -684,6 +688,7 @@ class _YearOverview extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.only(right: column == 2 ? 0 : 8),
                     child: _YearMonthBlock(
+                      month: row * 3 + column + 1,
                       seconds: buckets[row * 3 + column],
                       maxSeconds: maxSeconds,
                       onTap: () => onMonthTap(
@@ -704,23 +709,73 @@ class _YearOverview extends StatelessWidget {
 }
 
 class _PeriodTotals extends StatelessWidget {
-  const _PeriodTotals({required this.totalSeconds, required this.count});
+  const _PeriodTotals({
+    required this.totalSeconds,
+    required this.count,
+    required this.averageSeconds,
+    required this.averageLabel,
+  });
 
   final int totalSeconds;
   final int count;
+  final double averageSeconds;
+  final String averageLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Expanded(
-          child: _WeekStat(
-            value: formatFocusHoursMinutes(totalSeconds),
+          child: _SummaryStat(
+            value: formatFocusHoursDecimal(totalSeconds),
             label: '\u4e13\u6ce8\u65f6\u957f',
           ),
         ),
-        const SizedBox(width: 25),
-        _WeekStat(value: '$count', label: '\u4e13\u6ce8\u6b21\u6570'),
+        Container(width: 1, height: 38, color: const Color(0xFFE4E4E4)),
+        Expanded(
+          child: _SummaryStat(
+            value: '$count',
+            label: '\u4e13\u6ce8\u6b21\u6570',
+          ),
+        ),
+        Container(width: 1, height: 38, color: const Color(0xFFE4E4E4)),
+        Expanded(
+          child: _SummaryStat(
+            value: formatFocusHoursDecimal(averageSeconds),
+            label: averageLabel,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryStat extends StatelessWidget {
+  const _SummaryStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Color(0xFF111111),
+            fontSize: 20,
+            height: 1.05,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF858585), fontSize: 13),
+        ),
       ],
     );
   }
@@ -748,12 +803,14 @@ class _HeatCell extends StatelessWidget {
     required this.label,
     required this.seconds,
     required this.maxSeconds,
+    this.selected = false,
     required this.onTap,
   });
 
   final String label;
   final int seconds;
   final int maxSeconds;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -766,6 +823,9 @@ class _HeatCell extends StatelessWidget {
         decoration: BoxDecoration(
           color: _heatColor(level),
           borderRadius: BorderRadius.circular(3),
+          border: selected
+              ? Border.all(color: const Color(0xFF111111), width: 1.5)
+              : null,
         ),
         child: Text(
           label,
@@ -781,11 +841,13 @@ class _HeatCell extends StatelessWidget {
 
 class _YearMonthBlock extends StatelessWidget {
   const _YearMonthBlock({
+    required this.month,
     required this.seconds,
     required this.maxSeconds,
     required this.onTap,
   });
 
+  final int month;
   final List<int> seconds;
   final int maxSeconds;
   final VoidCallback onTap;
@@ -794,25 +856,39 @@ class _YearMonthBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var index = 0; index < 4; index++)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: index == 3 ? 0 : 3),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _heatColor(
-                        _heatLevel(seconds[index], maxSeconds),
+          Text(
+            '$month\u6708',
+            style: const TextStyle(
+              color: Color(0xFF858585),
+              fontSize: 13,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              for (var index = 0; index < 4; index++)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: index == 3 ? 0 : 3),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _heatColor(
+                            _heatLevel(seconds[index], maxSeconds),
+                          ),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                 ),
-              ),
-            ),
+            ],
+          ),
         ],
       ),
     );
@@ -858,9 +934,28 @@ class _EmptyHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      '\u8fd9\u4e00\u65f6\u95f4\u6bb5\u8fd8\u6ca1\u6709\u4e13\u6ce8\u8bb0\u5f55',
-      style: TextStyle(color: Color(0xFF858585), fontSize: 18),
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '\u6682\u65e0\u8bb0\u5f55',
+          style: TextStyle(
+            color: Color(0xFF111111),
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          '\u8fd9\u4e00\u65f6\u95f4\u6bb5\u8fd8\u6ca1\u6709\u4e13\u6ce8\u8bb0\u5f55',
+          style: TextStyle(color: Color(0xFF858585), fontSize: 16),
+        ),
+        SizedBox(height: 6),
+        Text(
+          '\u5f00\u59cb\u4e13\u6ce8\uff0c\u8bb0\u5f55\u4f60\u7684\u65f6\u95f4\u5427',
+          style: TextStyle(color: Color(0xFF858585), fontSize: 16),
+        ),
+      ],
     );
   }
 }

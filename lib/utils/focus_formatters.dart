@@ -27,6 +27,11 @@ String formatFocusHoursMinutes(int seconds) {
   return formatted.isEmpty ? '0m' : formatted;
 }
 
+String formatFocusHoursDecimal(num seconds) {
+  final safeSeconds = seconds < 0 ? 0 : seconds;
+  return '${(safeSeconds / Duration.secondsPerHour).toStringAsFixed(2)}h';
+}
+
 DateTime startOfFocusWeek(DateTime date) {
   final day = DateTime(date.year, date.month, date.day);
   return day.subtract(Duration(days: day.weekday - DateTime.monday));
