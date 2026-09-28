@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class BrandHeader extends StatelessWidget {
@@ -160,6 +161,142 @@ class PrimaryButton extends StatelessWidget {
           textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
         ),
         child: Text(label),
+      ),
+    );
+  }
+}
+
+/// Duration picker used by task creation and task editing.
+///
+/// Unlike Flutter's CupertinoTimerPicker, the hour column is also looping so
+/// all three columns have the same scroll behavior.
+class LoopingDurationPicker extends StatefulWidget {
+  const LoopingDurationPicker({
+    super.key,
+    required this.initialDuration,
+    required this.onDurationChanged,
+  });
+
+  final Duration initialDuration;
+  final ValueChanged<Duration> onDurationChanged;
+
+  @override
+  State<LoopingDurationPicker> createState() => _LoopingDurationPickerState();
+}
+
+class _LoopingDurationPickerState extends State<LoopingDurationPicker> {
+  late int _hours;
+  late int _minutes;
+  late int _seconds;
+  late final FixedExtentScrollController _hourController;
+  late final FixedExtentScrollController _minuteController;
+  late final FixedExtentScrollController _secondController;
+
+  @override
+  void initState() {
+    super.initState();
+    final totalSeconds =
+        widget.initialDuration.inSeconds.clamp(0, 23 * 3600 + 59 * 60 + 59);
+    _hours = totalSeconds ~/ 3600;
+    _minutes = (totalSeconds % 3600) ~/ 60;
+    _seconds = totalSeconds % 60;
+    _hourController = FixedExtentScrollController(initialItem: _hours);
+    _minuteController = FixedExtentScrollController(initialItem: _minutes);
+    _secondController = FixedExtentScrollController(initialItem: _seconds);
+  }
+
+  @override
+  void dispose() {
+    _hourController.dispose();
+    _minuteController.dispose();
+    _secondController.dispose();
+    super.dispose();
+  }
+
+  void _changed({int? hours, int? minutes, int? seconds}) {
+    setState(() {
+      _hours = hours ?? _hours;
+      _minutes = minutes ?? _minutes;
+      _seconds = seconds ?? _seconds;
+    });
+    widget.onDurationChanged(
+      Duration(hours: _hours, minutes: _minutes, seconds: _seconds),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoTheme(
+      data: const CupertinoThemeData(
+        brightness: Brightness.light,
+        primaryColor: Color(0xFF111111),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildPicker(
+              controller: _hourController,
+              count: 24,
+              onChanged: (value) => _changed(hours: value % 24),
+            ),
+          ),
+          const _DurationPickerSeparator(),
+          Expanded(
+            child: _buildPicker(
+              controller: _minuteController,
+              count: 60,
+              onChanged: (value) => _changed(minutes: value % 60),
+            ),
+          ),
+          const _DurationPickerSeparator(),
+          Expanded(
+            child: _buildPicker(
+              controller: _secondController,
+              count: 60,
+              onChanged: (value) => _changed(seconds: value % 60),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPicker({
+    required FixedExtentScrollController controller,
+    required int count,
+    required ValueChanged<int> onChanged,
+  }) {
+    return CupertinoPicker(
+      scrollController: controller,
+      itemExtent: 32,
+      looping: true,
+      squeeze: 1.25,
+      magnification: 34 / 32,
+      backgroundColor: Colors.transparent,
+      onSelectedItemChanged: onChanged,
+      children: [
+        for (var index = 0; index < count; index++)
+          Text(
+            index.toString().padLeft(2, '0'),
+            maxLines: 1,
+            softWrap: false,
+          ),
+      ],
+    );
+  }
+}
+
+class _DurationPickerSeparator extends StatelessWidget {
+  const _DurationPickerSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      ':',
+      style: TextStyle(
+        color: Color(0xFF111111),
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
       ),
     );
   }

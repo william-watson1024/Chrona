@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -647,13 +646,6 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
 
   int get _durationSeconds => _duration.inSeconds;
 
-  String get _durationLabel {
-    final hours = _duration.inHours;
-    final minutes = _duration.inMinutes.remainder(60);
-    final seconds = _duration.inSeconds.remainder(60);
-    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -714,8 +706,7 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
               ),
               const SizedBox(height: 24),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Text(
                     '\u4E13\u6CE8\u65F6\u957F',
@@ -725,35 +716,20 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Text(
-                    _durationLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF111111),
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 1.2,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 96,
+                      child: LoopingDurationPicker(
+                        initialDuration: _duration,
+                        onDurationChanged: (duration) => setState(() {
+                          _duration = duration;
+                          _durationError = null;
+                        }),
+                      ),
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 156,
-                width: double.infinity,
-                child: CupertinoTheme(
-                  data: const CupertinoThemeData(
-                    brightness: Brightness.light,
-                    primaryColor: Color(0xFF111111),
-                  ),
-                  child: CupertinoTimerPicker(
-                    mode: CupertinoTimerPickerMode.hms,
-                    initialTimerDuration: _duration,
-                    onTimerDurationChanged: (duration) => setState(() {
-                      _duration = duration;
-                      _durationError = null;
-                    }),
-                  ),
-                ),
               ),
               if (_durationError != null)
                 Align(
