@@ -211,10 +211,6 @@ class _TodayHomeContent extends StatelessWidget {
               child:
                   _AddTaskButton(onPressed: () => _showAddTaskDialog(context))),
         ),
-        const SliverPadding(
-          padding: EdgeInsets.fromLTRB(28, 48, 24, 24),
-          sliver: SliverToBoxAdapter(child: _BrandQuote()),
-        ),
       ],
     );
   }
@@ -714,33 +710,6 @@ class _AddTaskButton extends StatelessWidget {
         label: const Text('添加任务',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
       ),
-    );
-  }
-}
-
-class _BrandQuote extends StatelessWidget {
-  const _BrandQuote();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(width: 4, height: 112, color: const Color(0xFFE2E2E2)),
-        const SizedBox(width: 18),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('不是时间不够用，\n而是我们没有好好拾起它。',
-                style: TextStyle(
-                    color: Color(0xFF888888), fontSize: 17, height: 1.7)),
-            SizedBox(height: 5),
-            Text('— 拾年',
-                style: TextStyle(
-                    color: Color(0xFF888888), fontSize: 16, height: 1.3)),
-          ],
-        ),
-      ],
     );
   }
 }
