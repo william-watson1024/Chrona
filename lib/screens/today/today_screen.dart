@@ -6,6 +6,7 @@ import '../../models/task.dart';
 import '../../providers/focus_provider.dart';
 import '../../providers/focus_session_provider.dart';
 import '../../providers/task_provider.dart';
+import '../../utils/focus_formatters.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
 import '../settings/settings_screen.dart';
@@ -272,26 +273,26 @@ class _TodaySummary extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('今天',
+              const Text('今天',
                   style: TextStyle(
                       color: Color(0xFF111111),
                       fontSize: 38,
                       height: 1.05,
                       fontWeight: FontWeight.w600)),
-              SizedBox(height: 13),
+              const SizedBox(height: 13),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text('9 月 27 日 · 星期六',
-                    style: TextStyle(
+                child: Text(formatFocusDate(DateTime.now()),
+                    style: const TextStyle(
                         color: Color(0xFF8B8B8B),
-                        fontSize: 19,
+                        fontSize: 15,
                         height: 1.1,
-                        letterSpacing: 1.1)),
+                        letterSpacing: 0)),
               ),
             ],
           ),

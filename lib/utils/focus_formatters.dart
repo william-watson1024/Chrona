@@ -27,7 +27,7 @@ DateTime startOfFocusWeek(DateTime date) {
 
 String formatFocusDate(DateTime date) {
   const weekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
-  return '${date.month}月${date.day}日 · 星期${weekdays[date.weekday - 1]}';
+  return '${date.month}月${date.day}日·星期${weekdays[date.weekday - 1]}';
 }
 
 String formatFocusDayHeading(DateTime date, {DateTime? now}) {
