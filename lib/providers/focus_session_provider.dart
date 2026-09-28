@@ -41,6 +41,19 @@ class FocusSessionProvider extends ChangeNotifier {
     return actualSeconds / Duration.secondsPerHour;
   }
 
+  List<FocusSession> sessionsBetween(DateTime start, DateTime end) {
+    return _sessions
+        .where((session) =>
+            !session.startedAt.isBefore(start) &&
+            session.startedAt.isBefore(end))
+        .toList(growable: false);
+  }
+
+  List<FocusSession> sessionsForDay(DateTime date) {
+    final start = DateTime(date.year, date.month, date.day);
+    return sessionsBetween(start, start.add(const Duration(days: 1)));
+  }
+
   Future<void> loadSessions() async {
     if (_isLoaded) return;
 
@@ -72,6 +85,27 @@ class FocusSessionProvider extends ChangeNotifier {
       _isSaving = false;
       notifyListeners();
     }
+  }
+
+  Future<FocusSession?> updateSessionNote(
+    FocusSession session,
+    String? note,
+  ) async {
+    final id = session.id;
+    if (id == null) return null;
+
+    final normalizedNote = note?.trim();
+    final updated = session.copyWithNote(
+      normalizedNote == null || normalizedNote.isEmpty ? null : normalizedNote,
+    );
+    if (!_isInMemory) {
+      await _database.updateFocusSessionNote(id, updated.note);
+    }
+
+    final index = _sessions.indexWhere((item) => item.id == id);
+    if (index >= 0) _sessions[index] = updated;
+    notifyListeners();
+    return updated;
   }
 
   void _sortSessions() {

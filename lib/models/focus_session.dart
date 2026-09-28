@@ -83,4 +83,19 @@ class FocusSession {
       createdAt: createdAt,
     );
   }
+
+  FocusSession copyWithNote(String? value) {
+    return FocusSession(
+      id: id,
+      taskId: taskId,
+      taskTitleSnapshot: taskTitleSnapshot,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      plannedDurationSeconds: plannedDurationSeconds,
+      actualDurationSeconds: actualDurationSeconds,
+      note: value,
+      status: status,
+      createdAt: createdAt,
+    );
+  }
 }

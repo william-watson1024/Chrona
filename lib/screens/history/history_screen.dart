@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,6 +7,10 @@ import '../../models/focus_session.dart';
 import '../../providers/focus_session_provider.dart';
 import '../../utils/focus_formatters.dart';
 import '../../widgets/chrona_widgets.dart';
+import '../../widgets/focus_session_entry.dart';
+import '../settings/settings_screen.dart';
+import 'day_detail_screen.dart';
+import 'record_detail_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -45,35 +51,66 @@ class _HistoryContent extends StatelessWidget {
                   }
 
                   final groups = _groupSessions(provider.sessions);
+                  final week = _WeekSummary.fromSessions(
+                    provider.sessions,
+                    DateTime.now(),
+                  );
+
                   return ListView(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
                     children: [
-                      const BrandHeader(),
+                      BrandHeader(
+                        onSettingsPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 67),
                       const Text(
                         '记录',
                         style: TextStyle(
-                            color: Color(0xFF111111),
-                            fontSize: 38,
-                            height: 1.05,
-                            fontWeight: FontWeight.w600),
+                          color: Color(0xFF111111),
+                          fontSize: 38,
+                          height: 1.05,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      const SizedBox(height: 64),
+                      const SizedBox(height: 48),
+                      _WeekOverview(
+                        summary: week,
+                        onDayTap: (date) => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DayDetailScreen(date: date),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                      const Divider(color: Color(0xFFE4E4E4)),
+                      const SizedBox(height: 34),
                       if (groups.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 30),
-                          child: Text(
-                            '还没有专注记录',
-                            style: TextStyle(
-                                color: Color(0xFF858585), fontSize: 18),
+                        const Text(
+                          '还没有专注记录',
+                          style: TextStyle(
+                            color: Color(0xFF858585),
+                            fontSize: 18,
                           ),
                         )
                       else
                         for (var index = 0; index < groups.length; index++) ...[
-                          _HistoryGroup(group: groups[index]),
+                          _HistoryGroup(
+                            group: groups[index],
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => DayDetailScreen(
+                                  date: groups[index].date,
+                                ),
+                              ),
+                            ),
+                          ),
                           if (index != groups.length - 1)
-                            const SizedBox(height: 65),
+                            const SizedBox(height: 42),
                         ],
                     ],
                   );
@@ -85,6 +122,10 @@ class _HistoryContent extends StatelessWidget {
               onTabSelected: (index) {
                 if (index == 0) {
                   Navigator.of(context).popUntil((route) => route.isFirst);
+                } else if (index == 2) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
                 }
               },
             ),
@@ -112,130 +153,318 @@ class _HistoryContent extends StatelessWidget {
   }
 }
 
+class _WeekSummary {
+  _WeekSummary({required this.weekStart, required this.sessions})
+      : daySeconds = List<int>.filled(7, 0),
+        daySessions = List<List<FocusSession>>.generate(7, (_) => []);
+
+  factory _WeekSummary.fromSessions(
+    List<FocusSession> sessions,
+    DateTime date,
+  ) {
+    final weekStart = startOfFocusWeek(date);
+    final summary = _WeekSummary(
+      weekStart: weekStart,
+      sessions: sessions
+          .where((session) =>
+              !session.startedAt.isBefore(weekStart) &&
+              session.startedAt
+                  .isBefore(weekStart.add(const Duration(days: 7))))
+          .toList(growable: false),
+    );
+
+    for (final session in summary.sessions) {
+      final index = session.startedAt.difference(weekStart).inDays;
+      if (index < 0 || index > 6) continue;
+      summary.daySeconds[index] += session.actualDurationSeconds;
+      summary.daySessions[index].add(session);
+    }
+    return summary;
+  }
+
+  final DateTime weekStart;
+  final List<FocusSession> sessions;
+  final List<int> daySeconds;
+  final List<List<FocusSession>> daySessions;
+
+  int get totalSeconds => daySeconds.fold(0, (total, value) => total + value);
+  int get count => sessions.length;
+  int get averageSeconds => totalSeconds ~/ 7;
+
+  int get longestDayIndex {
+    var index = 0;
+    for (var current = 1; current < daySeconds.length; current++) {
+      if (daySeconds[current] > daySeconds[index]) index = current;
+    }
+    return index;
+  }
+
+  DateTime dateAt(int index) => weekStart.add(Duration(days: index));
+}
+
+class _WeekOverview extends StatelessWidget {
+  const _WeekOverview({required this.summary, required this.onDayTap});
+
+  final _WeekSummary summary;
+  final ValueChanged<DateTime> onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxSeconds = summary.daySeconds.fold<int>(
+      0,
+      (max, value) => math.max(max, value),
+    );
+    final longestSeconds = summary.daySeconds[summary.longestDayIndex];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '本周',
+                    style: TextStyle(
+                      color: Color(0xFF111111),
+                      fontSize: 31,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _WeekStat(
+              value: formatFocusHoursMinutes(summary.totalSeconds),
+              label: '专注时长',
+            ),
+            const SizedBox(width: 25),
+            _WeekStat(value: '${summary.count}', label: '专注次数'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${summary.weekStart.month}月${summary.weekStart.day}日 — '
+          '${summary.dateAt(6).month}月${summary.dateAt(6).day}日',
+          style: const TextStyle(color: Color(0xFF858585), fontSize: 19),
+        ),
+        const SizedBox(height: 39),
+        SizedBox(
+          height: 184,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var index = 0; index < 7; index++)
+                Expanded(
+                  child: _WeekBar(
+                    date: summary.dateAt(index),
+                    seconds: summary.daySeconds[index],
+                    maxSeconds: maxSeconds,
+                    onTap: () => onDayTap(summary.dateAt(index)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            Expanded(
+              child: _WeekStat(
+                value: formatFocusHoursMinutes(summary.averageSeconds),
+                label: '平均每天',
+                alignStart: true,
+              ),
+            ),
+            Container(width: 1, height: 54, color: const Color(0xFFE4E4E4)),
+            Expanded(
+              child: _WeekStat(
+                value: summary.count == 0
+                    ? '—'
+                    : '${_weekday(summary.longestDayIndex)} · '
+                        '${formatFocusHoursMinutes(longestSeconds)}',
+                label: '最长一天',
+                alignStart: true,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _weekday(int index) =>
+      const ['一', '二', '三', '四', '五', '六', '日'][index];
+}
+
+class _WeekBar extends StatelessWidget {
+  const _WeekBar({
+    required this.date,
+    required this.seconds,
+    required this.maxSeconds,
+    required this.onTap,
+  });
+
+  final DateTime date;
+  final int seconds;
+  final int maxSeconds;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = maxSeconds == 0 ? 0.0 : seconds / maxSeconds;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: SizedBox(
+                width: 42,
+                height: 156,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: 42,
+                    height: 156,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F1F1),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    alignment: Alignment.bottomCenter,
+                    child: FractionallySizedBox(
+                      widthFactor: 1,
+                      heightFactor: fraction,
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111111),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _weekday(date.weekday),
+            style: const TextStyle(color: Color(0xFF858585), fontSize: 17),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _weekday(int weekday) =>
+      const ['一', '二', '三', '四', '五', '六', '日'][weekday - 1];
+}
+
+class _WeekStat extends StatelessWidget {
+  const _WeekStat({
+    required this.value,
+    required this.label,
+    this.alignStart = false,
+  });
+
+  final String value;
+  final String label;
+  final bool alignStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment:
+          alignStart ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Color(0xFF111111),
+            fontSize: 27,
+            height: 1.05,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFF858585), fontSize: 16),
+        ),
+      ],
+    );
+  }
+}
+
 class _HistoryDayGroup {
   _HistoryDayGroup({required this.date, required this.sessions});
 
   final DateTime date;
   final List<FocusSession> sessions;
+
+  int get totalSeconds => sessions.fold(
+        0,
+        (total, session) => total + session.actualDurationSeconds,
+      );
 }
 
 class _HistoryGroup extends StatelessWidget {
-  const _HistoryGroup({required this.group});
+  const _HistoryGroup({required this.group, required this.onTap});
 
   final _HistoryDayGroup group;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          _dayLabel(group.date),
-          style: const TextStyle(
-              color: Color(0xFF111111),
-              fontSize: 34,
-              height: 1.1,
-              fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 13),
-        Text(
-          _dateLabel(group.date),
-          style: const TextStyle(
-              color: Color(0xFF8B8B8B), fontSize: 20, height: 1.1),
-        ),
-        const SizedBox(height: 33),
-        for (final session in group.sessions) _HistoryEntry(session: session),
-      ],
-    );
-  }
-
-  String _dayLabel(DateTime date) {
-    final today = DateTime.now();
-    final day = DateTime(date.year, date.month, date.day);
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    if (day == todayOnly) return '今天';
-    if (day == todayOnly.subtract(const Duration(days: 1))) return '昨天';
-    return '${date.month}月${date.day}日';
-  }
-
-  String _dateLabel(DateTime date) {
-    const weekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
-    return '${date.month}月${date.day}日 · 星期${weekdays[date.weekday - 1]}';
-  }
-}
-
-class _HistoryEntry extends StatelessWidget {
-  const _HistoryEntry({required this.session});
-
-  final FocusSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final note = session.note?.isNotEmpty == true ? session.note! : '未填写记录';
-    final duration = formatFocusDuration(session.actualDurationSeconds);
-    final durationLabel = session.status == FocusSessionStatus.cancelled
-        ? '提前结束 · $duration'
-        : duration;
-
-    return Container(
-      padding: const EdgeInsets.only(bottom: 25, top: 2),
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE9E9E9))),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              '${formatFocusTime(session.startedAt)} — '
-              '${formatFocusTime(session.endedAt)}',
-              maxLines: 1,
-              softWrap: false,
-              style: const TextStyle(
-                  color: Color(0xFF858585), fontSize: 18, height: 1.25),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 82,
-            margin: const EdgeInsets.only(right: 24),
-            color: const Color(0xFFE1E1E1),
-          ),
-          Expanded(
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  session.taskTitleSnapshot,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  formatFocusDayHeading(group.date),
                   style: const TextStyle(
-                      color: Color(0xFF111111),
-                      fontSize: 21,
-                      height: 1.25,
-                      fontWeight: FontWeight.w500),
+                    color: Color(0xFF111111),
+                    fontSize: 32,
+                    height: 1.1,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 10),
                 Text(
-                  note,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  '${group.sessions.length} 次专注 · '
+                  '${formatFocusHoursMinutes(group.totalSeconds)}',
                   style: const TextStyle(
-                      color: Color(0xFF858585), fontSize: 17, height: 1.3),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  durationLabel,
-                  style: const TextStyle(
-                      color: Color(0xFF858585), fontSize: 15, height: 1.1),
+                    color: Color(0xFF858585),
+                    fontSize: 18,
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        for (final session in group.sessions)
+          FocusSessionEntry(
+            session: session,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => RecordDetailScreen(session: session),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

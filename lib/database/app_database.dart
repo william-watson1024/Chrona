@@ -97,6 +97,16 @@ class AppDatabase {
     return session.copyWith(id: id);
   }
 
+  Future<void> updateFocusSessionNote(int id, String? note) async {
+    final db = await database;
+    await db.update(
+      'focus_session',
+      {'note': note},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> _createFocusSessionTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS focus_session (

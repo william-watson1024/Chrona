@@ -46,6 +46,30 @@ void main() {
     expect(provider.todayFocusDurationHours, closeTo(5 / 60, 0.001));
   });
 
+  test('updates only the FocusSession note', () async {
+    final now = DateTime.now();
+    final session = FocusSession(
+      id: 7,
+      taskId: 1,
+      taskTitleSnapshot: '测试任务',
+      startedAt: now.subtract(const Duration(minutes: 25)),
+      endedAt: now,
+      plannedDurationSeconds: 25 * 60,
+      actualDurationSeconds: 25 * 60,
+      note: '旧记录',
+      status: FocusSessionStatus.completed,
+      createdAt: now,
+    );
+    final provider = FocusSessionProvider.inMemory([session]);
+
+    final updated = await provider.updateSessionNote(session, '新记录');
+
+    expect(updated?.note, '新记录');
+    expect(updated?.startedAt, session.startedAt);
+    expect(updated?.actualDurationSeconds, session.actualDurationSeconds);
+    expect(provider.sessions.single.note, '新记录');
+  });
+
   testWidgets('app starts', (tester) async {
     await tester.pumpWidget(
       ChronaApp(
@@ -99,6 +123,7 @@ void main() {
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
     expect(find.text('记录'), findsNWidgets(2));
+    await tester.scrollUntilVisible(find.text('阅读 Orca 论文'), 240);
     expect(find.text('阅读 Orca 论文'), findsOneWidget);
     expect(find.text('补充一条 Mock 记录'), findsOneWidget);
   });
