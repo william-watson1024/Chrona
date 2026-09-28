@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -210,10 +208,6 @@ class _WeekOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxSeconds = summary.daySeconds.fold<int>(
-      0,
-      (max, value) => math.max(max, value),
-    );
     final longestSeconds = summary.daySeconds[summary.longestDayIndex];
 
     return Column(
@@ -262,7 +256,6 @@ class _WeekOverview extends StatelessWidget {
                   child: _WeekBar(
                     date: summary.dateAt(index),
                     seconds: summary.daySeconds[index],
-                    maxSeconds: maxSeconds,
                     onTap: () => onDayTap(summary.dateAt(index)),
                   ),
                 ),
@@ -304,18 +297,22 @@ class _WeekBar extends StatelessWidget {
   const _WeekBar({
     required this.date,
     required this.seconds,
-    required this.maxSeconds,
     required this.onTap,
   });
 
   final DateTime date;
   final int seconds;
-  final int maxSeconds;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final fraction = maxSeconds == 0 ? 0.0 : seconds / maxSeconds;
+    const fullScaleSeconds = 8 * Duration.secondsPerHour;
+    const chartHeight = 156.0;
+    const minimumBarPixels = 2.0;
+    final rawFraction = seconds / fullScaleSeconds;
+    final fraction = seconds <= 0
+        ? 0.0
+        : rawFraction.clamp(minimumBarPixels / chartHeight, 1.0);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
