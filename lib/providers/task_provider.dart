@@ -64,6 +64,17 @@ class TaskProvider extends ChangeNotifier {
     if (trimmedTitle.isEmpty) return;
 
     final normalizedPlanDate = startOfDay(planDate ?? DateTime.now());
+    final existingTasks = tasksForDate(normalizedPlanDate).toList();
+    final shiftedTasks = [
+      for (var index = 0; index < existingTasks.length; index++)
+        existingTasks[index].copyWith(sortOrder: index + 1),
+    ];
+    if (!_isInMemory) await _database.updateTaskOrders(shiftedTasks);
+    for (final task in shiftedTasks) {
+      final index = _tasks.indexWhere((item) => item.id == task.id);
+      if (index >= 0) _tasks[index] = task;
+    }
+
     final task = Task(
       title: trimmedTitle,
       note: note?.trim().isEmpty == true ? null : note?.trim(),
@@ -71,7 +82,7 @@ class TaskProvider extends ChangeNotifier {
       createdAt: DateTime.now().millisecondsSinceEpoch,
       durationSeconds: durationSeconds,
       planDate: normalizedPlanDate,
-      sortOrder: _nextSortOrderForDate(normalizedPlanDate),
+      sortOrder: 0,
     );
     final savedTask = _isInMemory
         ? task.copyWith(id: _nextInMemoryId--)
@@ -148,14 +159,5 @@ class TaskProvider extends ChangeNotifier {
     if (byOrder != 0) return byOrder;
     if (first.completed != second.completed) return first.completed ? 1 : -1;
     return second.createdAt.compareTo(first.createdAt);
-  }
-
-  int _nextSortOrderForDate(DateTime date) {
-    final tasks = tasksForDate(date);
-    if (tasks.isEmpty) return 0;
-    return tasks
-            .map((task) => task.sortOrder)
-            .reduce((first, second) => first > second ? first : second) +
-        1;
   }
 }

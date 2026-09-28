@@ -5,6 +5,7 @@ import '../../models/focus_session.dart';
 import '../../providers/focus_provider.dart';
 import '../../providers/focus_settings_provider.dart';
 import '../../providers/focus_session_provider.dart';
+import '../../providers/task_provider.dart';
 import '../../services/notification_service.dart';
 import '../../utils/focus_formatters.dart';
 import '../../widgets/chrona_widgets.dart';
@@ -22,6 +23,7 @@ class FocusNoteScreen extends StatefulWidget {
 
 class _FocusNoteScreenState extends State<FocusNoteScreen> {
   late final TextEditingController _noteController;
+  late final TextEditingController _taskTitleController;
   late final FocusSessionProvider _sessionProvider;
   late final bool _ownsSessionProvider;
   bool _isSaving = false;
@@ -31,6 +33,8 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
   void initState() {
     super.initState();
     _noteController = TextEditingController();
+    _taskTitleController =
+        TextEditingController(text: widget.session.task.title);
     final inheritedProvider =
         Provider.of<FocusSessionProvider?>(context, listen: false);
     _ownsSessionProvider = inheritedProvider == null;
@@ -40,20 +44,31 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
   @override
   void dispose() {
     _noteController.dispose();
+    _taskTitleController.dispose();
     if (_ownsSessionProvider) _sessionProvider.dispose();
     super.dispose();
   }
 
   Future<void> _saveSession() async {
     if (_isSaving) return;
+    final taskTitle = _taskTitleController.text.trim();
+    if (taskTitle.isEmpty) {
+      setState(() => _saveError = '任务名称不能为空');
+      return;
+    }
     setState(() {
       _isSaving = true;
       _saveError = null;
     });
 
+    final updatedTask = widget.session.task.copyWith(title: taskTitle);
+    final taskProvider = Provider.of<TaskProvider?>(context, listen: false);
+    final settingsProvider =
+        Provider.of<FocusSettingsProvider?>(context, listen: false);
+
     final session = FocusSession(
       taskId: widget.session.task.id,
-      taskTitleSnapshot: widget.session.task.title,
+      taskTitleSnapshot: taskTitle,
       startedAt: widget.session.startedAt,
       endedAt: widget.session.endedAt,
       plannedDurationSeconds: widget.session.plannedDurationSeconds,
@@ -77,16 +92,18 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         });
         return;
       }
+      if (taskProvider != null) {
+        await taskProvider.updateTask(updatedTask);
+      }
+      if (!mounted) return;
       if (widget.session.status == FocusTimerStatus.finished) {
-        final settings =
-            Provider.of<FocusSettingsProvider?>(context, listen: false);
-        final breakDuration = settings?.breakDurationSeconds ??
+        final breakDuration = settingsProvider?.breakDurationSeconds ??
             FocusSettingsProvider.defaultBreakDurationSeconds;
         final nextFocusDuration = widget.session.task.durationSeconds;
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => FocusScreen(
-              task: widget.session.task,
+              task: updatedTask,
               durationSeconds: breakDuration,
               mode: FocusMode.rest,
               nextFocusDurationSeconds: nextFocusDuration,
@@ -135,13 +152,18 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                           fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 43),
-                    Text(
-                      widget.session.task.title,
+                    TextField(
+                      controller: _taskTitleController,
                       style: const TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 30,
                           height: 1.15,
                           fontWeight: FontWeight.w500),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(

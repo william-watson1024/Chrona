@@ -640,7 +640,6 @@ class _AddTaskDialog extends StatefulWidget {
 class _AddTaskDialogState extends State<_AddTaskDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _noteController;
-  String? _titleError;
   String? _durationError;
   Duration _duration = const Duration(minutes: 25);
 
@@ -649,7 +648,11 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController();
+    _titleController = TextEditingController(text: '\u9ED8\u8BA4\u4EFB\u52A1');
+    _titleController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _titleController.text.length,
+    );
     _noteController = TextEditingController();
   }
 
@@ -676,14 +679,13 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                 controller: _titleController,
                 autofocus: true,
                 textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: '标题',
                   hintText: '输入任务名称',
-                  errorText: _titleError,
-                  enabledBorder: const UnderlineInputBorder(
+                  enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(color: Color(0xFFDDDDDD)),
                   ),
-                  focusedBorder: const UnderlineInputBorder(
+                  focusedBorder: UnderlineInputBorder(
                     borderSide: BorderSide(color: Color(0xFF111111)),
                   ),
                 ),
@@ -753,11 +755,9 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final title = _titleController.text.trim();
-            if (title.isEmpty) {
-              setState(() => _titleError = '标题不能为空');
-              return;
-            }
+            final title = _titleController.text.trim().isEmpty
+                ? '\u9ED8\u8BA4\u4EFB\u52A1'
+                : _titleController.text.trim();
             if (_durationSeconds == 0) {
               setState(() => _durationError =
                   '\u4E13\u6CE8\u65F6\u957F\u4E0D\u80FD\u4E3A 0');

@@ -58,6 +58,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   int remainingSeconds;
   int? pausedRemainingSeconds;
   FocusTimerStatus status = FocusTimerStatus.idle;
+  bool isCountUp = false;
 
   Timer? _ticker;
 
@@ -65,6 +66,17 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isPaused => status == FocusTimerStatus.paused;
   bool get isFinished => status == FocusTimerStatus.finished;
   bool get isBreak => mode == FocusMode.rest;
+
+  int get displaySeconds {
+    if (!isCountUp) return remainingSeconds;
+    final elapsed = plannedDurationSeconds - remainingSeconds;
+    return elapsed < 0 ? 0 : elapsed;
+  }
+
+  void toggleTimerDisplay() {
+    isCountUp = !isCountUp;
+    notifyListeners();
+  }
 
   int get actualDurationSeconds {
     final start = startedAt;

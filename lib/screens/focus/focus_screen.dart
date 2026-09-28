@@ -201,11 +201,16 @@ class _FocusScreenState extends State<FocusScreen> {
                             ),
                             const SizedBox(height: 24),
                           ],
-                          _FocusProgress(
-                            remainingSeconds: provider.remainingSeconds,
-                            plannedDurationSeconds:
-                                provider.plannedDurationSeconds,
-                            status: provider.status,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: provider.toggleTimerDisplay,
+                            child: _FocusProgress(
+                              remainingSeconds: provider.remainingSeconds,
+                              displaySeconds: provider.displaySeconds,
+                              plannedDurationSeconds:
+                                  provider.plannedDurationSeconds,
+                              status: provider.status,
+                            ),
                           ),
                           const SizedBox(height: 58),
                           if (isBreakReady) ...[
@@ -349,11 +354,13 @@ class _FocusTopBar extends StatelessWidget {
 class _FocusProgress extends StatelessWidget {
   const _FocusProgress({
     required this.remainingSeconds,
+    required this.displaySeconds,
     required this.plannedDurationSeconds,
     required this.status,
   });
 
   final int remainingSeconds;
+  final int displaySeconds;
   final int plannedDurationSeconds;
   final FocusTimerStatus status;
 
@@ -391,7 +398,7 @@ class _FocusProgress extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _formatRemaining(remainingSeconds),
+                _formatRemaining(displaySeconds),
                 style: const TextStyle(
                   color: Color(0xFF111111),
                   fontSize: 70,
