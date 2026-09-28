@@ -30,9 +30,10 @@ class TaskProvider extends ChangeNotifier {
 
   List<Task> tasksForDate(DateTime date) {
     final day = startOfDay(date);
-    return _tasks
-        .where((task) => task.effectivePlanDate == day)
-        .toList(growable: false);
+    final result =
+        _tasks.where((task) => task.effectivePlanDate == day).toList();
+    result.sort(_compareTasks);
+    return List.unmodifiable(result);
   }
 
   int completedCountForDate(DateTime date) {
@@ -62,13 +63,15 @@ class TaskProvider extends ChangeNotifier {
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) return;
 
+    final normalizedPlanDate = startOfDay(planDate ?? DateTime.now());
     final task = Task(
       title: trimmedTitle,
       note: note?.trim().isEmpty == true ? null : note?.trim(),
       completed: false,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       durationSeconds: durationSeconds,
-      planDate: startOfDay(planDate ?? DateTime.now()),
+      planDate: normalizedPlanDate,
+      sortOrder: _nextSortOrderForDate(normalizedPlanDate),
     );
     final savedTask = _isInMemory
         ? task.copyWith(id: _nextInMemoryId--)
@@ -90,6 +93,37 @@ class TaskProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateTask(Task updatedTask) async {
+    if (!_isInMemory) await _database.updateTask(updatedTask);
+    _replaceTask(updatedTask);
+    notifyListeners();
+  }
+
+  Future<void> reorderTasksForDate(
+    DateTime date,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final ordered = tasksForDate(date).toList();
+    if (oldIndex < 0 || oldIndex >= ordered.length) return;
+    if (newIndex < 0 || newIndex >= ordered.length) return;
+
+    final moved = ordered.removeAt(oldIndex);
+    ordered.insert(newIndex, moved);
+    final updated = [
+      for (var index = 0; index < ordered.length; index++)
+        ordered[index].copyWith(sortOrder: index),
+    ];
+
+    if (!_isInMemory) await _database.updateTaskOrders(updated);
+    for (final task in updated) {
+      final index = _tasks.indexWhere((item) => item.id == task.id);
+      if (index >= 0) _tasks[index] = task;
+    }
+    _sortTasks();
+    notifyListeners();
+  }
+
   Future<void> deleteTask(Task task) async {
     if (!_isInMemory) await _database.deleteTask(task);
     _tasks.removeWhere((item) => item.id == task.id);
@@ -104,9 +138,24 @@ class TaskProvider extends ChangeNotifier {
   }
 
   void _sortTasks() {
-    _tasks.sort((a, b) {
-      if (a.completed != b.completed) return a.completed ? 1 : -1;
-      return b.createdAt.compareTo(a.createdAt);
-    });
+    _tasks.sort(_compareTasks);
+  }
+
+  int _compareTasks(Task first, Task second) {
+    final byDate = first.effectivePlanDate.compareTo(second.effectivePlanDate);
+    if (byDate != 0) return byDate;
+    final byOrder = first.sortOrder.compareTo(second.sortOrder);
+    if (byOrder != 0) return byOrder;
+    if (first.completed != second.completed) return first.completed ? 1 : -1;
+    return second.createdAt.compareTo(first.createdAt);
+  }
+
+  int _nextSortOrderForDate(DateTime date) {
+    final tasks = tasksForDate(date);
+    if (tasks.isEmpty) return 0;
+    return tasks
+            .map((task) => task.sortOrder)
+            .reduce((first, second) => first > second ? first : second) +
+        1;
   }
 }

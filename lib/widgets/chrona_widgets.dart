@@ -74,7 +74,7 @@ class ChronaBottomNavigation extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _NavItem(
-            label: '今天',
+            label: '今朝',
             icon: Icons.home_filled,
             selected: selectedIndex == 0,
             onTap: () => onTabSelected(0),

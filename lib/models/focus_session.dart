@@ -39,18 +39,23 @@ class FocusSession {
   final DateTime createdAt;
 
   factory FocusSession.fromMap(Map<String, Object?> map) {
+    final now = DateTime.now();
+    final startedAt = _readDateTime(map['started_at'], now);
+    final endedAt = _readDateTime(map['ended_at'], startedAt);
     return FocusSession(
-      id: map['id'] as int?,
-      taskId: map['task_id'] as int?,
-      taskTitleSnapshot: map['task_title_snapshot'] as String,
-      startedAt: DateTime.fromMillisecondsSinceEpoch(map['started_at'] as int),
-      endedAt: DateTime.fromMillisecondsSinceEpoch(map['ended_at'] as int),
-      plannedDurationSeconds: map['planned_duration_seconds'] as int,
-      actualDurationSeconds: map['actual_duration_seconds'] as int,
+      id: _readInt(map['id']),
+      taskId: _readInt(map['task_id']),
+      taskTitleSnapshot: map['task_title_snapshot'] as String? ?? '未命名任务',
+      startedAt: startedAt,
+      endedAt: endedAt,
+      plannedDurationSeconds: _readInt(map['planned_duration_seconds']) ?? 0,
+      actualDurationSeconds: _readInt(map['actual_duration_seconds']) ??
+          endedAt.difference(startedAt).inSeconds.clamp(0, 1 << 31).toInt(),
       note: map['note'] as String?,
-      status:
-          FocusSessionStatusValue.fromDatabaseValue(map['status'] as String),
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      status: FocusSessionStatusValue.fromDatabaseValue(
+        map['status'] as String? ?? 'COMPLETED',
+      ),
+      createdAt: _readDateTime(map['created_at'], endedAt),
     );
   }
 
@@ -98,4 +103,18 @@ class FocusSession {
       createdAt: createdAt,
     );
   }
+}
+
+int? _readInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+DateTime _readDateTime(Object? value, DateTime fallback) {
+  final milliseconds = _readInt(value);
+  return milliseconds == null
+      ? fallback
+      : DateTime.fromMillisecondsSinceEpoch(milliseconds);
 }

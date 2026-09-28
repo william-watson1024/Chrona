@@ -10,6 +10,7 @@ import '../../utils/focus_formatters.dart';
 import '../focus/focus_screen.dart';
 import '../history/history_screen.dart';
 import '../settings/settings_screen.dart';
+import 'task_detail_screen.dart';
 import '../../widgets/chrona_widgets.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -188,6 +189,11 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
             ChronaBottomNavigation(
               selectedIndex: _selectedTab,
               onTabSelected: (index) {
+                if (index == 0) {
+                  _selectDate(DateTime.now());
+                  if (_selectedTab != 0) setState(() => _selectedTab = 0);
+                  return;
+                }
                 if (index == 1) {
                   Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const HistoryScreen()));
@@ -301,16 +307,32 @@ class _TodayHomeContent extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              children: [
-                for (final task in tasks)
-                  _TaskRow(
+            child: ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: tasks.length,
+              onReorderItem: (oldIndex, newIndex) {
+                taskProvider.reorderTasksForDate(
+                  selectedDate,
+                  oldIndex,
+                  newIndex,
+                );
+              },
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey(task.id ?? task.createdAt),
+                  index: index,
+                  child: _TaskRow(
                     task: task,
+                    onTap: () => _openTask(context, task),
                     onToggle: () => taskProvider.toggleTask(task),
                     onDelete: () => _confirmDelete(context, task),
                     onStart: task.completed ? null : () => onStartFocus(task),
                   ),
-              ],
+                );
+              },
             ),
           ),
         ),
@@ -365,6 +387,18 @@ class _TodayHomeContent extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       await context.read<TaskProvider>().deleteTask(task);
     }
+  }
+
+  void _openTask(BuildContext context, Task task) {
+    final taskProvider = context.read<TaskProvider>();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TaskDetailScreen(
+          task: task,
+          taskProvider: taskProvider,
+        ),
+      ),
+    );
   }
 }
 
@@ -801,12 +835,14 @@ class _StatBlock extends StatelessWidget {
 class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.task,
+    required this.onTap,
     required this.onToggle,
     required this.onDelete,
     required this.onStart,
   });
 
   final Task task;
+  final VoidCallback onTap;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback? onStart;
@@ -828,38 +864,42 @@ class _TaskRow extends StatelessWidget {
           _CompletionButton(completed: task.completed, onPressed: onToggle),
           const SizedBox(width: 17),
           Expanded(
-            child: Opacity(
-              opacity: task.completed ? 0.65 : 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(task.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: contentColor,
-                          fontSize: 21,
-                          height: 1.25,
-                          fontWeight: FontWeight.w500,
-                          decoration: textDecoration,
-                          decorationThickness: 1.5)),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      const Icon(Icons.schedule_outlined,
-                          size: 18, color: Color(0xFF8A8A8A)),
-                      const SizedBox(width: 7),
-                      Flexible(
-                          child: Text(_formatTaskDuration(task.durationSeconds),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Color(0xFF8A8A8A),
-                                  fontSize: 16,
-                                  height: 1.15))),
-                    ],
-                  ),
-                ],
+            child: GestureDetector(
+              onTap: onTap,
+              child: Opacity(
+                opacity: task.completed ? 0.65 : 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(task.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: contentColor,
+                            fontSize: 21,
+                            height: 1.25,
+                            fontWeight: FontWeight.w500,
+                            decoration: textDecoration,
+                            decorationThickness: 1.5)),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule_outlined,
+                            size: 18, color: Color(0xFF8A8A8A)),
+                        const SizedBox(width: 7),
+                        Flexible(
+                            child: Text(
+                                _formatTaskDuration(task.durationSeconds),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Color(0xFF8A8A8A),
+                                    fontSize: 16,
+                                    height: 1.15))),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

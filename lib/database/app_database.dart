@@ -19,7 +19,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     _database = await openDatabase(
       databasePath,
-      version: 4,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -30,7 +30,8 @@ class AppDatabase {
             created_at INTEGER NOT NULL,
             completed_at INTEGER,
             duration_seconds INTEGER NOT NULL DEFAULT 900,
-            plan_date INTEGER NOT NULL
+            plan_date INTEGER NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0
           )
         ''');
 
@@ -53,18 +54,50 @@ class AppDatabase {
             columns: ['id', 'created_at'],
           );
           for (final row in rows) {
+            final createdAtMilliseconds =
+                _readInt(row['created_at']) ?? DateTime.now().millisecondsSinceEpoch;
             final createdAt =
-                DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int);
+                DateTime.fromMillisecondsSinceEpoch(createdAtMilliseconds);
             final planDate =
                 DateTime(createdAt.year, createdAt.month, createdAt.day)
                     .millisecondsSinceEpoch;
             await db.update(
               'task',
-              {'plan_date': planDate},
+              {
+                'created_at': createdAtMilliseconds,
+                'plan_date': planDate,
+              },
               where: 'id = ?',
               whereArgs: [row['id']],
             );
           }
+        }
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE task ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+          );
+          final rows = await db.query(
+            'task',
+            columns: ['id', 'plan_date', 'created_at'],
+            orderBy: 'plan_date ASC, completed ASC, created_at DESC',
+          );
+          final nextOrderByDate = <int, int>{};
+          for (final row in rows) {
+            final planDate = _readInt(row['plan_date']) ??
+                _readInt(row['created_at']) ??
+                DateTime.now().millisecondsSinceEpoch;
+            final nextOrder = nextOrderByDate[planDate] ?? 0;
+            await db.update(
+              'task',
+              {'sort_order': nextOrder},
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+            nextOrderByDate[planDate] = nextOrder + 1;
+          }
+        }
+        if (oldVersion < 6) {
+          await _repairNullValues(db);
         }
       },
     );
@@ -75,7 +108,7 @@ class AppDatabase {
     final db = await database;
     final rows = await db.query(
       'task',
-      orderBy: 'completed ASC, created_at DESC',
+      orderBy: 'plan_date ASC, sort_order ASC, created_at DESC',
     );
     return rows.map(Task.fromMap).toList();
   }
@@ -93,6 +126,22 @@ class AppDatabase {
     final db = await database;
     await db.update('task', task.toMap()..remove('id'),
         where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> updateTaskOrders(Iterable<Task> tasks) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final task in tasks) {
+      final id = task.id;
+      if (id == null) continue;
+      batch.update(
+        'task',
+        {'sort_order': task.sortOrder},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<void> deleteTask(Task task) async {
@@ -145,6 +194,87 @@ class AppDatabase {
     ''');
   }
 
+  Future<void> _repairNullValues(Database db) async {
+    final taskRows = await db.query(
+      'task',
+      columns: [
+        'id',
+        'title',
+        'completed',
+        'created_at',
+        'duration_seconds',
+        'plan_date',
+        'sort_order',
+      ],
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final row in taskRows) {
+      final id = _readInt(row['id']);
+      if (id == null) continue;
+
+      final createdAt = _readInt(row['created_at']) ?? now;
+      final createdDate = DateTime.fromMillisecondsSinceEpoch(createdAt);
+      final planDate = _readInt(row['plan_date']) ??
+          DateTime(createdDate.year, createdDate.month, createdDate.day)
+              .millisecondsSinceEpoch;
+      final duration = _readInt(row['duration_seconds']) ?? 25 * 60;
+      final completed = _readInt(row['completed']) ?? 0;
+      final sortOrder = _readInt(row['sort_order']) ?? 0;
+
+      await db.update(
+        'task',
+        {
+          'completed': completed == 1 ? 1 : 0,
+          'created_at': createdAt,
+          'duration_seconds': duration,
+          'plan_date': planDate,
+          'sort_order': sortOrder,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+
+    final sessionRows = await db.query(
+      'focus_session',
+      columns: [
+        'id',
+        'task_title_snapshot',
+        'started_at',
+        'ended_at',
+        'planned_duration_seconds',
+        'actual_duration_seconds',
+        'status',
+        'created_at',
+      ],
+    );
+    for (final row in sessionRows) {
+      final id = _readInt(row['id']);
+      if (id == null) continue;
+
+      final startedAt = _readInt(row['started_at']) ?? now;
+      final endedAt = _readInt(row['ended_at']) ?? startedAt;
+      final actual = _readInt(row['actual_duration_seconds']) ??
+          ((endedAt - startedAt) ~/ 1000).clamp(0, 1 << 31).toInt();
+      await db.update(
+        'focus_session',
+        {
+          'task_title_snapshot':
+              row['task_title_snapshot'] as String? ?? '未命名任务',
+          'started_at': startedAt,
+          'ended_at': endedAt,
+          'planned_duration_seconds':
+              _readInt(row['planned_duration_seconds']) ?? actual,
+          'actual_duration_seconds': actual,
+          'status': row['status'] as String? ?? 'COMPLETED',
+          'created_at': _readInt(row['created_at']) ?? endedAt,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+  }
+
   Future<void> _insertInitialTasks(Database db) async {
     final createdAt = DateTime.now().millisecondsSinceEpoch;
     final createdDate = DateTime.fromMillisecondsSinceEpoch(createdAt);
@@ -166,9 +296,17 @@ class AppDatabase {
         'plan_date':
             DateTime(createdDate.year, createdDate.month, createdDate.day)
                 .millisecondsSinceEpoch,
+        'sort_order': index,
         'completed_at':
             initialTask['completed'] == 1 ? createdAt - index : null,
       });
     }
   }
+}
+
+int? _readInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }

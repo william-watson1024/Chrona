@@ -8,6 +8,7 @@ class Task {
     this.completedAt,
     this.durationSeconds = 25 * 60,
     this.planDate,
+    this.sortOrder = 0,
   });
 
   final int? id;
@@ -18,23 +19,27 @@ class Task {
   final int? completedAt;
   final int durationSeconds;
   final DateTime? planDate;
+  final int sortOrder;
 
   DateTime get effectivePlanDate => startOfDay(
         planDate ?? DateTime.fromMillisecondsSinceEpoch(createdAt),
       );
 
   factory Task.fromMap(Map<String, Object?> map) {
+    final createdAt = _readInt(map['created_at']) ??
+        DateTime.now().millisecondsSinceEpoch;
     return Task(
-      id: map['id'] as int?,
-      title: map['title'] as String,
+      id: _readInt(map['id']),
+      title: map['title'] as String? ?? '未命名任务',
       note: map['note'] as String?,
-      completed: (map['completed'] as int) == 1,
-      createdAt: map['created_at'] as int,
-      completedAt: map['completed_at'] as int?,
-      durationSeconds: map['duration_seconds'] as int? ?? 25 * 60,
-      planDate: map['plan_date'] == null
+      completed: (_readInt(map['completed']) ?? 0) == 1,
+      createdAt: createdAt,
+      completedAt: _readInt(map['completed_at']),
+      durationSeconds: _readInt(map['duration_seconds']) ?? 25 * 60,
+      planDate: _readInt(map['plan_date']) == null
           ? null
-          : DateTime.fromMillisecondsSinceEpoch(map['plan_date'] as int),
+          : DateTime.fromMillisecondsSinceEpoch(_readInt(map['plan_date'])!),
+      sortOrder: _readInt(map['sort_order']) ?? 0,
     );
   }
 
@@ -48,6 +53,7 @@ class Task {
       'completed_at': completedAt,
       'duration_seconds': durationSeconds,
       'plan_date': effectivePlanDate.millisecondsSinceEpoch,
+      'sort_order': sortOrder,
     };
   }
 
@@ -60,6 +66,7 @@ class Task {
     int? completedAt,
     int? durationSeconds,
     DateTime? planDate,
+    int? sortOrder,
     bool clearCompletedAt = false,
   }) {
     return Task(
@@ -71,6 +78,7 @@ class Task {
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       durationSeconds: durationSeconds ?? this.durationSeconds,
       planDate: planDate ?? this.planDate,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 }
@@ -78,4 +86,11 @@ class Task {
 DateTime startOfDay(DateTime date) {
   final local = date.toLocal();
   return DateTime(local.year, local.month, local.day);
+}
+
+int? _readInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }
