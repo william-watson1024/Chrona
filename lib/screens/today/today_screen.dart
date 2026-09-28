@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
+import '../../models/journal_entry.dart';
 import '../../providers/focus_provider.dart';
 import '../../providers/focus_session_provider.dart';
+import '../../providers/journal_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/focus_formatters.dart';
 import '../focus/focus_screen.dart';
@@ -283,12 +285,18 @@ class _TodayTabContent extends StatelessWidget {
           itemCount: 40001,
           onPageChanged: onPageChanged,
           itemBuilder: (context, page) {
-            return _TodayDiaryContent(
-              selectedDate: dateForPage(page),
-              onOpenDatePicker: onOpenDatePicker,
-              onOpenSettings: onOpenSettings,
-              onTabChanged: onTabChanged,
-              onGoToLastYear: onGoToLastYear,
+            final date = dateForPage(page);
+            return ChangeNotifierProvider<JournalProvider>(
+              key: ValueKey(JournalEntry.dateKey(date)),
+              create: (_) => JournalProvider()..loadJournal(date),
+              child: _TodayDiaryContent(
+                key: ValueKey(JournalEntry.dateKey(date)),
+                selectedDate: date,
+                onOpenDatePicker: onOpenDatePicker,
+                onOpenSettings: onOpenSettings,
+                onTabChanged: onTabChanged,
+                onGoToLastYear: onGoToLastYear,
+              ),
             );
           },
         ),
@@ -695,6 +703,7 @@ class _TodaySummaryLine extends StatelessWidget {
 
 class _TodayDiaryContent extends StatefulWidget {
   const _TodayDiaryContent({
+    super.key,
     required this.selectedDate,
     required this.onOpenDatePicker,
     required this.onOpenSettings,
@@ -715,6 +724,10 @@ class _TodayDiaryContent extends StatefulWidget {
 class _TodayDiaryContentState extends State<_TodayDiaryContent> {
   late final TextEditingController _questionController;
   late final TextEditingController _diaryController;
+  String _questionText = JournalEntry.defaultQuestionText;
+  String? _appliedDate;
+  bool _hasLocalEdits = false;
+  bool _applyingEntry = false;
 
   @override
   void initState() {
@@ -736,36 +749,101 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
     super.dispose();
   }
 
-  void _onTextChanged() => setState(() {});
-
-  void _save() {
-    if (_questionController.text.trim().isEmpty &&
-        _diaryController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('\u5148\u5199\u4e0b\u4e00\u70b9\u5185\u5bb9\u5427')),
-      );
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text(
-              '\u5df2\u4fdd\u5b58\uff08\u6682\u672a\u6301\u4e45\u5316\uff09')),
-    );
+  void _onTextChanged() {
+    if (!_applyingEntry) _hasLocalEdits = true;
+    setState(() {});
   }
 
-  void _changeQuestion() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text(
-              '\u6362\u9898\u529f\u80fd\u5c06\u5728\u540e\u7eed\u5f00\u653e')),
+  Future<void> _save() async {
+    final provider = context.read<JournalProvider>();
+    try {
+      await provider.saveJournal(
+        date: widget.selectedDate,
+        questionText: _questionText,
+        questionAnswer: _questionController.text,
+        content: _diaryController.text,
+      );
+      if (!mounted) return;
+      _hasLocalEdits = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('\u5df2\u4fdd\u5b58')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
+      );
+    }
+  }
+
+  Future<void> _changeQuestion() async {
+    final controller = TextEditingController(text: _questionText);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('\u4fee\u6539\u4eca\u65e5\u95ee\u9898'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          maxLength: 200,
+          decoration: const InputDecoration(
+            hintText: '\u8f93\u5165\u4eca\u5929\u7684\u95ee\u9898',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('\u53d6\u6d88'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF111111),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('\u786e\u5b9a'),
+          ),
+        ],
+      ),
     );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    setState(() {
+      _questionText = value.trim().isEmpty
+          ? JournalEntry.defaultQuestionText
+          : value.trim();
+      _hasLocalEdits = true;
+    });
+    await context.read<JournalProvider>().updateQuestion(_questionText);
   }
 
   @override
   Widget build(BuildContext context) {
     final taskProvider = context.watch<TaskProvider>();
     final sessionProvider = context.watch<FocusSessionProvider>();
+    final journalProvider = context.watch<JournalProvider>();
+    final loadedDate = journalProvider.loadedDate;
+    if (!journalProvider.isLoading &&
+        loadedDate != null &&
+        _appliedDate != loadedDate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _appliedDate == loadedDate) return;
+        _appliedDate = loadedDate;
+        if (_hasLocalEdits) return;
+        final entry = context.read<JournalProvider>().entry;
+        _applyingEntry = true;
+        _questionText = entry?.questionText?.isNotEmpty == true
+            ? entry!.questionText!
+            : JournalEntry.defaultQuestionText;
+        _questionController.text = entry?.questionAnswer ?? '';
+        _diaryController.text = entry?.content ?? '';
+        _applyingEntry = false;
+        setState(() {});
+      });
+    }
     if (taskProvider.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
@@ -815,8 +893,8 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        '\u201c\u5982\u679c\u6ca1\u6709\u4eba\u77e5\u9053\u4f60\u7684\u9009\u62e9\uff0c\n\u4f60\u8fd8\u4f1a\u505a\u540c\u6837\u7684\u51b3\u5b9a\u5417\uff1f\u201d',
+                      Text(
+                        _questionText,
                         style: TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 18,
@@ -864,7 +942,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                   width: double.infinity,
                   height: 54,
                   child: FilledButton(
-                    onPressed: _save,
+                    onPressed: journalProvider.isSaving ? null : _save,
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF111111),
                       foregroundColor: Colors.white,

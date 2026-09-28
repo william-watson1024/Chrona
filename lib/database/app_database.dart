@@ -2,6 +2,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/focus_session.dart';
+import '../models/journal_entry.dart';
 import '../models/task.dart';
 
 class AppDatabase {
@@ -19,7 +20,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     _database = await openDatabase(
       databasePath,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -37,6 +38,7 @@ class AppDatabase {
 
         await _insertInitialTasks(db);
         await _createFocusSessionTable(db);
+        await _createJournalEntryTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -98,6 +100,9 @@ class AppDatabase {
         }
         if (oldVersion < 6) {
           await _repairNullValues(db);
+        }
+        if (oldVersion < 7) {
+          await _createJournalEntryTable(db);
         }
       },
     );
@@ -177,6 +182,72 @@ class AppDatabase {
     );
   }
 
+  Future<JournalEntry?> getJournalByDate(DateTime date) async {
+    final db = await database;
+    final rows = await db.query(
+      'journal_entry',
+      where: 'entry_date = ?',
+      whereArgs: [JournalEntry.dateKey(date)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return JournalEntry.fromMap(rows.first);
+  }
+
+  Future<List<JournalEntry>> getJournals() async {
+    final db = await database;
+    final rows = await db.query(
+      'journal_entry',
+      orderBy: 'entry_date DESC, id DESC',
+    );
+    return rows.map(JournalEntry.fromMap).toList(growable: false);
+  }
+
+  Future<JournalEntry> saveJournal(JournalEntry entry) async {
+    final db = await database;
+    final existingRows = await db.query(
+      'journal_entry',
+      columns: ['id'],
+      where: 'entry_date = ?',
+      whereArgs: [entry.entryDate],
+      limit: 1,
+    );
+
+    if (existingRows.isEmpty) {
+      final id = await db.insert('journal_entry', entry.toMap()..remove('id'));
+      return entry.copyWith(id: id);
+    }
+
+    final existingId = _readInt(existingRows.first['id']);
+    await db.update(
+      'journal_entry',
+      entry.toMap()..remove('id'),
+      where: 'entry_date = ?',
+      whereArgs: [entry.entryDate],
+    );
+    return entry.copyWith(id: existingId);
+  }
+
+  Future<void> updateJournal(JournalEntry entry) async {
+    final db = await database;
+    final values = entry.toMap()..remove('id');
+    if (entry.id != null) {
+      await db.update(
+        'journal_entry',
+        values,
+        where: 'id = ?',
+        whereArgs: [entry.id],
+      );
+      return;
+    }
+    await db.update(
+      'journal_entry',
+      values,
+      where: 'entry_date = ?',
+      whereArgs: [entry.entryDate],
+    );
+  }
+
   Future<void> _createFocusSessionTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS focus_session (
@@ -190,6 +261,21 @@ class AppDatabase {
         note TEXT,
         status TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createJournalEntryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS journal_entry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_date TEXT NOT NULL UNIQUE,
+        question_id INTEGER,
+        question_text TEXT,
+        question_answer TEXT,
+        content TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
       )
     ''');
   }
