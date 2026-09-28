@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:name="${applicationName}"
-        android:label="CHRONA"
+        android:label="拾年"
         android:icon="@drawable/ic_launcher">
         <activity
             android:name=".MainActivity"
