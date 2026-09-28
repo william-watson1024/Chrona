@@ -118,6 +118,53 @@ class AppDatabase {
     return rows.map(Task.fromMap).toList();
   }
 
+  Future<Map<String, dynamic>> exportData() async {
+    final db = await database;
+    await _createJournalEntryTable(db);
+    final tasks = await db.query('task', orderBy: 'id ASC');
+    final sessions = await db.query('focus_session', orderBy: 'id ASC');
+    final journals = await db.query('journal_entry', orderBy: 'id ASC');
+
+    return {
+      'format': 'chrona_backup',
+      'version': 1,
+      'exported_at': DateTime.now().toUtc().toIso8601String(),
+      'tasks': tasks.map((row) => Map<String, dynamic>.from(row)).toList(),
+      'focus_sessions':
+          sessions.map((row) => Map<String, dynamic>.from(row)).toList(),
+      'journal_entries':
+          journals.map((row) => Map<String, dynamic>.from(row)).toList(),
+    };
+  }
+
+  Future<void> importData(Map<String, dynamic> payload) async {
+    if (payload['format'] != 'chrona_backup' || payload['version'] != 1) {
+      throw const FormatException('Invalid CHRONA backup file');
+    }
+
+    final tasks = _backupRows(payload['tasks'], 'tasks');
+    final sessions = _backupRows(payload['focus_sessions'], 'focus_sessions');
+    final journals = _backupRows(payload['journal_entries'], 'journal_entries');
+    final db = await database;
+    await _createJournalEntryTable(db);
+
+    await db.transaction((txn) async {
+      await txn.delete('journal_entry');
+      await txn.delete('focus_session');
+      await txn.delete('task');
+
+      for (final row in tasks) {
+        await txn.insert('task', _taskBackupValues(row));
+      }
+      for (final row in sessions) {
+        await txn.insert('focus_session', _focusSessionBackupValues(row));
+      }
+      for (final row in journals) {
+        await txn.insert('journal_entry', _journalBackupValues(row));
+      }
+    });
+  }
+
   Future<Task> insertTask(Task task) async {
     final db = await database;
     final id = await db.insert('task', task.toMap()..remove('id'));
@@ -399,4 +446,82 @@ int? _readInt(Object? value) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value);
   return null;
+}
+
+List<Map<String, dynamic>> _backupRows(Object? value, String field) {
+  if (value is! List) {
+    throw FormatException('Backup field "$field" must be a list');
+  }
+  return value
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList(growable: false);
+}
+
+Map<String, Object?> _taskBackupValues(Map<String, dynamic> row) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final createdAt = _readInt(row['created_at']) ?? now;
+  final createdDate = DateTime.fromMillisecondsSinceEpoch(createdAt);
+  final id = _readInt(row['id']);
+  return {
+    if (id != null) 'id': id,
+    'title': row['title'] as String? ?? '\u9ED8\u8BA4\u4EFB\u52A1',
+    'note': row['note'] as String?,
+    'completed': _backupBool(row['completed']),
+    'created_at': createdAt,
+    'completed_at': _readInt(row['completed_at']),
+    'duration_seconds': _readInt(row['duration_seconds']) ?? 25 * 60,
+    'plan_date': _readInt(row['plan_date']) ??
+        DateTime(createdDate.year, createdDate.month, createdDate.day)
+            .millisecondsSinceEpoch,
+    'sort_order': _readInt(row['sort_order']) ?? 0,
+  };
+}
+
+Map<String, Object?> _focusSessionBackupValues(Map<String, dynamic> row) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final startedAt = _readInt(row['started_at']) ?? now;
+  final endedAt = _readInt(row['ended_at']) ?? startedAt;
+  final id = _readInt(row['id']);
+  return {
+    if (id != null) 'id': id,
+    'task_id': _readInt(row['task_id']),
+    'task_title_snapshot':
+        row['task_title_snapshot'] as String? ?? '\u9ED8\u8BA4\u4EFB\u52A1',
+    'started_at': startedAt,
+    'ended_at': endedAt,
+    'planned_duration_seconds':
+        _readInt(row['planned_duration_seconds']) ?? 0,
+    'actual_duration_seconds':
+        _readInt(row['actual_duration_seconds']) ??
+            ((endedAt - startedAt) ~/ 1000).clamp(0, 1 << 31).toInt(),
+    'note': row['note'] as String?,
+    'status': row['status'] == 'CANCELLED' ? 'CANCELLED' : 'COMPLETED',
+    'created_at': _readInt(row['created_at']) ?? endedAt,
+  };
+}
+
+Map<String, Object?> _journalBackupValues(Map<String, dynamic> row) {
+  final entryDate = row['entry_date'] as String?;
+  if (entryDate == null ||
+      !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(entryDate)) {
+    throw const FormatException('Invalid journal entry date');
+  }
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final id = _readInt(row['id']);
+  return {
+    if (id != null) 'id': id,
+    'entry_date': entryDate,
+    'question_id': _readInt(row['question_id']),
+    'question_text': row['question_text'] as String?,
+    'question_answer': row['question_answer'] as String?,
+    'content': row['content'] as String?,
+    'created_at': _readInt(row['created_at']) ?? now,
+    'updated_at': _readInt(row['updated_at']) ?? now,
+  };
+}
+
+int _backupBool(Object? value) {
+  if (value is bool) return value ? 1 : 0;
+  return _readInt(value) == 1 ? 1 : 0;
 }
