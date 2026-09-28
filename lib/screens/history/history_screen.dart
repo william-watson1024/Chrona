@@ -263,19 +263,16 @@ class _WeekOverview extends StatelessWidget {
               child: _WeekStat(
                 value: formatFocusHoursMinutes(summary.averageSeconds),
                 label: '平均每天',
-                alignStart: true,
               ),
             ),
             Container(width: 1, height: 54, color: const Color(0xFFE4E4E4)),
             Expanded(
               child: _WeekStat(
                 value: summary.count == 0
-                    ? '—'
+                    ? '暂无'
                     : '${_weekday(summary.longestDayIndex)} · '
                         '${formatFocusHoursMinutes(longestSeconds)}',
-                label: '最长一天',
-                alignStart: true,
-              ),
+                label: '最长一天')
             ),
           ],
         ),
@@ -362,18 +359,15 @@ class _WeekStat extends StatelessWidget {
   const _WeekStat({
     required this.value,
     required this.label,
-    this.alignStart = false,
   });
 
   final String value;
   final String label;
-  final bool alignStart;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-          alignStart ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           value,
