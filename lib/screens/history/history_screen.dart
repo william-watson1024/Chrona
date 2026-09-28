@@ -66,16 +66,6 @@ class _HistoryContent extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 67),
-                      const Text(
-                        '记录',
-                        style: TextStyle(
-                          color: Color(0xFF111111),
-                          fontSize: 38,
-                          height: 1.05,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 48),
                       _WeekOverview(
                         summary: week,
                         onDayTap: (date) => Navigator.of(context).push(
@@ -216,16 +206,26 @@ class _WeekOverview extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     '本周',
                     style: TextStyle(
                       color: Color(0xFF111111),
                       fontSize: 31,
                       fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${summary.weekStart.month}月${summary.weekStart.day}日—'
+                    '${summary.dateAt(6).month}月${summary.dateAt(6).day}日',
+                    style: const TextStyle(
+                      color: Color(0xFF858585),
+                      fontSize: 16,
+                      height: 1.1,
                     ),
                   ),
                 ],
@@ -238,12 +238,6 @@ class _WeekOverview extends StatelessWidget {
             const SizedBox(width: 25),
             _WeekStat(value: '${summary.count}', label: '专注次数'),
           ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '${summary.weekStart.month}月${summary.weekStart.day}日 — '
-          '${summary.dateAt(6).month}月${summary.dateAt(6).day}日',
-          style: const TextStyle(color: Color(0xFF858585), fontSize: 19),
         ),
         const SizedBox(height: 39),
         SizedBox(

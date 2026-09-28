@@ -31,19 +31,6 @@ class FocusSessionEntry extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 101,
-              child: Text(
-                '${formatFocusTime(session.startedAt)} — '
-                '${formatFocusTime(session.endedAt)}',
-                style: const TextStyle(
-                  color: Color(0xFF858585),
-                  fontSize: 17,
-                  height: 1.3,
-                ),
-              ),
-            ),
-            const SizedBox(width: 18),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,6 +44,16 @@ class FocusSessionEntry extends StatelessWidget {
                       fontSize: 20,
                       height: 1.25,
                       fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${formatFocusTime(session.startedAt)} — '
+                    '${formatFocusTime(session.endedAt)}',
+                    style: const TextStyle(
+                      color: Color(0xFF858585),
+                      fontSize: 16,
+                      height: 1.25,
                     ),
                   ),
                   if (note != null && note.isNotEmpty) ...[
@@ -77,7 +74,7 @@ class FocusSessionEntry extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             SizedBox(
-              width: 78,
+              width: 64,
               child: Text(
                 durationLabel,
                 textAlign: TextAlign.right,
