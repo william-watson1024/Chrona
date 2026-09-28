@@ -18,8 +18,10 @@ class NotificationService {
   // Use a new channel id so existing silent installations receive the alert
   // configuration without any native bridge or extra vibration plugin.
   static const String focusChannelId = 'chrona_focus_alerts_v3';
-  static const String breakChannelId = 'chrona_break_alerts_v1';
+  static const String breakChannelId = 'chrona_break_alerts_v2';
   static const String _stopReminderActionId = 'stop_focus_reminder';
+  static const AndroidNotificationSound _systemDefaultSound =
+      UriAndroidNotificationSound('content://settings/system/notification_sound');
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -74,6 +76,7 @@ class NotificationService {
           description: 'CHRONA 休息结束提醒',
           importance: Importance.high,
           playSound: true,
+          sound: _systemDefaultSound,
           enableVibration: true,
           vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
         ),
@@ -137,6 +140,7 @@ class NotificationService {
       endsAt: endsAt,
       plannedDurationSeconds: null,
       playSound: true,
+      sound: _systemDefaultSound,
       payload: 'break_finished',
     );
   }
@@ -148,6 +152,7 @@ class NotificationService {
     required DateTime endsAt,
     required int? plannedDurationSeconds,
     required bool playSound,
+    AndroidNotificationSound? sound,
     required String payload,
   }) {
     return _enqueue(() async {
@@ -174,6 +179,7 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           playSound: playSound,
+          sound: sound,
           enableVibration: true,
           vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
           category: AndroidNotificationCategory.alarm,
