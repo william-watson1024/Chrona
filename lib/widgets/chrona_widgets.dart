@@ -2,9 +2,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class BrandHeader extends StatelessWidget {
-  const BrandHeader({super.key, this.onSettingsPressed});
+  const BrandHeader({
+    super.key,
+    this.onSettingsPressed,
+    this.showSettingsButton = true,
+  });
 
   final VoidCallback? onSettingsPressed;
+  final bool showSettingsButton;
 
   @override
   Widget build(BuildContext context) {
@@ -39,15 +44,16 @@ class BrandHeader extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          onPressed: onSettingsPressed,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-          icon: const Icon(Icons.settings_outlined, size: 23),
-          color: const Color(0xFF111111),
-          tooltip: '设置',
-        ),
+        if (showSettingsButton)
+          IconButton(
+            onPressed: onSettingsPressed,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            icon: const Icon(Icons.settings_outlined, size: 23),
+            color: const Color(0xFF111111),
+            tooltip: '设置',
+          ),
       ],
     );
   }

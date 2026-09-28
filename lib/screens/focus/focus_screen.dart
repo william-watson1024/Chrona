@@ -329,24 +329,15 @@ class _FocusTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        IconButton(
-          onPressed: onBack,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-          icon: const Icon(Icons.arrow_back, size: 29),
-          tooltip: '返回',
-        ),
-        IconButton(
-          onPressed: () {},
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-          icon: const Icon(Icons.settings_outlined, size: 24),
-          tooltip: '设置',
-        ),
-      ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: IconButton(
+        onPressed: onBack,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+        icon: const Icon(Icons.arrow_back, size: 29),
+        tooltip: '返回',
+      ),
     );
   }
 }

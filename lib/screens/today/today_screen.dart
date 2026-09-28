@@ -183,6 +183,9 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
                 onPageChanged: _handlePageChanged,
                 dateForPage: _dateForPage,
                 onOpenDatePicker: _openDatePicker,
+                onOpenSettings: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
               ),
             ),
             ChronaBottomNavigation(
@@ -223,6 +226,7 @@ class _TodayTabContent extends StatelessWidget {
     required this.onPageChanged,
     required this.dateForPage,
     required this.onOpenDatePicker,
+    required this.onOpenSettings,
   });
 
   final int selectedTab;
@@ -231,6 +235,7 @@ class _TodayTabContent extends StatelessWidget {
   final ValueChanged<int> onPageChanged;
   final DateTime Function(int page) dateForPage;
   final VoidCallback onOpenDatePicker;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +251,7 @@ class _TodayTabContent extends StatelessWidget {
           selectedDate: dateForPage(page),
           onStartFocus: onStartFocus,
           onOpenDatePicker: onOpenDatePicker,
+          onOpenSettings: onOpenSettings,
         );
       },
     );
@@ -257,11 +263,13 @@ class _TodayHomeContent extends StatelessWidget {
     required this.selectedDate,
     required this.onStartFocus,
     required this.onOpenDatePicker,
+    required this.onOpenSettings,
   });
 
   final DateTime selectedDate;
   final ValueChanged<Task> onStartFocus;
   final VoidCallback onOpenDatePicker;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +296,7 @@ class _TodayHomeContent extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
-                const BrandHeader(),
+                BrandHeader(onSettingsPressed: onOpenSettings),
                 const SizedBox(height: 48),
                 _TodaySummary(
                   selectedDate: selectedDate,

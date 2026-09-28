@@ -48,7 +48,7 @@ class _SettingsContent extends StatelessWidget {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
                     children: [
-                      const BrandHeader(),
+                      const BrandHeader(showSettingsButton: false),
                       const SizedBox(height: 67),
                       const Text(
                         '设置',
