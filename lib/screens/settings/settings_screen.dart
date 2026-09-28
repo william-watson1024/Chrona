@@ -25,11 +25,6 @@ class _SettingsContent extends StatelessWidget {
   const _SettingsContent();
 
   static const _breakOptions = <int>[
-    10,
-    30,
-    60,
-    2 * 60,
-    3 * 60,
     5 * 60,
     10 * 60,
     15 * 60,
