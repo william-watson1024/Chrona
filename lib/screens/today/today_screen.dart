@@ -455,68 +455,6 @@ class _TodayHomeContent extends StatelessWidget {
   }
 }
 
-// Kept for compatibility with the previous home layout.
-// ignore: unused_element
-class _TodaySummary extends StatelessWidget {
-  const _TodaySummary({
-    required this.selectedDate,
-    required this.completedCount,
-    required this.focusDurationHours,
-    required this.onTap,
-  });
-
-  final DateTime selectedDate;
-  final int completedCount;
-  final double focusDurationHours;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: onTap,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_dateStatusTitle(selectedDate),
-                    style: const TextStyle(
-                        color: Color(0xFF111111),
-                        fontSize: 38,
-                        height: 1.05,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 13),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(formatFocusDate(selectedDate),
-                      style: const TextStyle(
-                          color: Color(0xFF8B8B8B),
-                          fontSize: 15,
-                          height: 1.1,
-                          letterSpacing: 0)),
-                ),
-              ],
-            ),
-          ),
-        ),
-        _StatBlock(value: '$completedCount', label: '已完成'),
-        Container(
-            width: 1,
-            height: 48,
-            margin: const EdgeInsets.symmetric(horizontal: 17),
-            color: const Color(0xFFE6E6E6)),
-        _StatBlock(
-          value: focusDurationHours.toStringAsFixed(2),
-          label: '专注时长 (h)',
-        ),
-      ],
-    );
-  }
-}
-
 class _TodayHeader extends StatelessWidget {
   const _TodayHeader({
     required this.selectedDate,
@@ -659,22 +597,13 @@ class _TodaySummaryLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final weekday = const [
-      '\u4e00',
-      '\u4e8c',
-      '\u4e09',
-      '\u56db',
-      '\u4e94',
-      '\u516d',
-      '\u65e5',
-    ][selectedDate.weekday - 1];
     return GestureDetector(
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${selectedDate.month}\u6708${selectedDate.day}\u65e5\u00b7\u661f\u671f$weekday',
+            formatFocusDate(selectedDate),
             style: const TextStyle(
               color: Color(0xFF858585),
               fontSize: 16,
@@ -777,7 +706,9 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
+        const SnackBar(
+            content: Text(
+                '\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
       );
     }
   }
@@ -841,8 +772,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
         if (_hasLocalEdits) return;
         final entry = _journalProvider.entry;
         _applyingEntry = true;
-        _questionText =
-            JournalEntry.normalizeQuestionText(entry?.questionText);
+        _questionText = JournalEntry.normalizeQuestionText(entry?.questionText);
         _questionController.text = entry?.questionAnswer ?? '';
         _diaryController.text = entry?.content ?? '';
         _applyingEntry = false;
@@ -900,7 +830,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                     children: [
                       Text(
                         '\u201c$_questionText\u201d',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Color(0xFF111111),
                           fontSize: 18,
                           height: 1.55,
@@ -1417,32 +1347,6 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
   }
 }
 
-class _StatBlock extends StatelessWidget {
-  const _StatBlock({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: Color(0xFF111111),
-                fontSize: 30,
-                height: 1,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(height: 10),
-        Text(label,
-            style: const TextStyle(
-                color: Color(0xFF8B8B8B), fontSize: 15, height: 1)),
-      ],
-    );
-  }
-}
-
 class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.task,
@@ -1500,7 +1404,7 @@ class _TaskRow extends StatelessWidget {
                         const SizedBox(width: 7),
                         Flexible(
                             child: Text(
-                                _formatTaskDuration(task.durationSeconds),
+                                formatFocusDuration(task.durationSeconds),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -1529,10 +1433,6 @@ class _TaskRow extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatTaskDuration(int seconds) {
-  return formatFocusDuration(seconds);
 }
 
 class _CompletionButton extends StatelessWidget {
@@ -1613,36 +1513,6 @@ class _AddTaskButton extends StatelessWidget {
         icon: const Icon(Icons.add, size: 27),
         label: const Text('添加任务',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
-      ),
-    );
-  }
-}
-
-// Kept for compatibility with older navigation state.
-// ignore: unused_element
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const BrandHeader(),
-          const SizedBox(height: 64),
-          Text(title,
-              style: const TextStyle(
-                  color: Color(0xFF111111),
-                  fontSize: 36,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 14),
-          const Text('这里将在后续版本开放。',
-              style: TextStyle(color: Color(0xFF888888), fontSize: 17)),
-        ],
       ),
     );
   }

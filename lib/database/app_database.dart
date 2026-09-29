@@ -11,14 +11,28 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   Database? _database;
+  Future<Database>? _openingDatabase;
 
   Future<Database> get database async {
     final current = _database;
     if (current != null) return current;
 
+    final opening = _openingDatabase;
+    if (opening != null) return opening;
+
+    final future = _openDatabase();
+    _openingDatabase = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_openingDatabase, future)) _openingDatabase = null;
+    }
+  }
+
+  Future<Database> _openDatabase() async {
     final databaseDirectory = await getDatabasesPath();
     final databasePath = join(databaseDirectory, 'chrona.db');
-    _database = await openDatabase(
+    final database = await openDatabase(
       databasePath,
       version: 7,
       onCreate: (db, version) async {
@@ -56,8 +70,8 @@ class AppDatabase {
             columns: ['id', 'created_at'],
           );
           for (final row in rows) {
-            final createdAtMilliseconds =
-                _readInt(row['created_at']) ?? DateTime.now().millisecondsSinceEpoch;
+            final createdAtMilliseconds = _readInt(row['created_at']) ??
+                DateTime.now().millisecondsSinceEpoch;
             final createdAt =
                 DateTime.fromMillisecondsSinceEpoch(createdAtMilliseconds);
             final planDate =
@@ -106,7 +120,8 @@ class AppDatabase {
         }
       },
     );
-    return _database!;
+    _database = database;
+    return database;
   }
 
   Future<List<Task>> loadTasks() async {
@@ -452,10 +467,14 @@ List<Map<String, dynamic>> _backupRows(Object? value, String field) {
   if (value is! List) {
     throw FormatException('Backup field "$field" must be a list');
   }
-  return value
-      .whereType<Map>()
-      .map((row) => Map<String, dynamic>.from(row))
-      .toList(growable: false);
+  final rows = <Map<String, dynamic>>[];
+  for (final row in value) {
+    if (row is! Map) {
+      throw FormatException('Backup field "$field" contains an invalid row');
+    }
+    rows.add(Map<String, dynamic>.from(row));
+  }
+  return List.unmodifiable(rows);
 }
 
 Map<String, Object?> _taskBackupValues(Map<String, dynamic> row) {
@@ -483,6 +502,10 @@ Map<String, Object?> _focusSessionBackupValues(Map<String, dynamic> row) {
   final startedAt = _readInt(row['started_at']) ?? now;
   final endedAt = _readInt(row['ended_at']) ?? startedAt;
   final id = _readInt(row['id']);
+  final status = row['status'];
+  if (status != null && status != 'COMPLETED' && status != 'CANCELLED') {
+    throw const FormatException('Invalid focus session status');
+  }
   return {
     if (id != null) 'id': id,
     'task_id': _readInt(row['task_id']),
@@ -490,21 +513,18 @@ Map<String, Object?> _focusSessionBackupValues(Map<String, dynamic> row) {
         row['task_title_snapshot'] as String? ?? '\u9ED8\u8BA4\u4EFB\u52A1',
     'started_at': startedAt,
     'ended_at': endedAt,
-    'planned_duration_seconds':
-        _readInt(row['planned_duration_seconds']) ?? 0,
-    'actual_duration_seconds':
-        _readInt(row['actual_duration_seconds']) ??
-            ((endedAt - startedAt) ~/ 1000).clamp(0, 1 << 31).toInt(),
+    'planned_duration_seconds': _readInt(row['planned_duration_seconds']) ?? 0,
+    'actual_duration_seconds': _readInt(row['actual_duration_seconds']) ??
+        ((endedAt - startedAt) ~/ 1000).clamp(0, 1 << 31).toInt(),
     'note': row['note'] as String?,
-    'status': row['status'] == 'CANCELLED' ? 'CANCELLED' : 'COMPLETED',
+    'status': status == 'CANCELLED' ? 'CANCELLED' : 'COMPLETED',
     'created_at': _readInt(row['created_at']) ?? endedAt,
   };
 }
 
 Map<String, Object?> _journalBackupValues(Map<String, dynamic> row) {
   final entryDate = row['entry_date'] as String?;
-  if (entryDate == null ||
-      !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(entryDate)) {
+  if (entryDate == null || !_isValidDateKey(entryDate)) {
     throw const FormatException('Invalid journal entry date');
   }
   final now = DateTime.now().millisecondsSinceEpoch;
@@ -519,6 +539,16 @@ Map<String, Object?> _journalBackupValues(Map<String, dynamic> row) {
     'created_at': _readInt(row['created_at']) ?? now,
     'updated_at': _readInt(row['updated_at']) ?? now,
   };
+}
+
+bool _isValidDateKey(String value) {
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+  if (match == null) return false;
+  final year = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final day = int.parse(match.group(3)!);
+  final date = DateTime(year, month, day);
+  return date.year == year && date.month == month && date.day == day;
 }
 
 int _backupBool(Object? value) {

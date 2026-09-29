@@ -220,7 +220,12 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    final shouldCancelNotification =
+        status == FocusTimerStatus.running || status == FocusTimerStatus.paused;
     _ticker?.cancel();
+    if (shouldCancelNotification) {
+      unawaited(NotificationService.instance.cancelFocusEnd());
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

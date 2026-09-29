@@ -13,6 +13,7 @@ class JournalProvider extends ChangeNotifier {
   String _draftQuestionText = JournalEntry.defaultQuestionText;
   bool _isLoading = false;
   bool _isSaving = false;
+  String? _error;
   bool _disposed = false;
   int _loadRequest = 0;
 
@@ -21,12 +22,14 @@ class JournalProvider extends ChangeNotifier {
   String get questionText => _draftQuestionText;
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
+  String? get error => _error;
 
   Future<void> loadJournal(DateTime date) async {
     final request = ++_loadRequest;
     final key = JournalEntry.dateKey(date);
     _loadedDate = key;
     _isLoading = true;
+    _error = null;
     _notifyListeners();
 
     try {
@@ -35,6 +38,11 @@ class JournalProvider extends ChangeNotifier {
       _entry = entry;
       _draftQuestionText =
           JournalEntry.normalizeQuestionText(entry?.questionText);
+    } catch (error) {
+      if (request != _loadRequest) return;
+      _entry = null;
+      _draftQuestionText = JournalEntry.defaultQuestionText;
+      _error = error.toString();
     } finally {
       if (request == _loadRequest) {
         _isLoading = false;

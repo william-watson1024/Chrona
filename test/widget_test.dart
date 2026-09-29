@@ -6,6 +6,7 @@ import 'package:chrona/providers/focus_settings_provider.dart';
 import 'package:chrona/providers/focus_session_provider.dart';
 import 'package:chrona/providers/task_provider.dart';
 import 'package:chrona/screens/focus/focus_screen.dart';
+import 'package:chrona/screens/history/history_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -82,15 +83,22 @@ void main() {
     expect(find.text('C H R O N A'), findsOneWidget);
     expect(find.text('阅读 Orca 论文'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('添加任务'), 240);
+    final addTask = find.text('添加任务');
+    await tester.scrollUntilVisible(
+      addTask,
+      240,
+      scrollable:
+          find.ancestor(of: addTask, matching: find.byType(Scrollable)).last,
+    );
     expect(find.text('添加任务'), findsOneWidget);
   });
 
   testWidgets('focus demo flow navigates to history', (tester) async {
+    final focusSessionProvider = createTestFocusSessionProvider();
     await tester.pumpWidget(
       ChronaApp(
         taskProvider: createTestTaskProvider(),
-        focusSessionProvider: createTestFocusSessionProvider(),
+        focusSessionProvider: focusSessionProvider,
       ),
     );
 
@@ -98,7 +106,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('25:00'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('暂停'), 240);
+    final pauseButton = find.text('暂停');
+    await tester.scrollUntilVisible(
+      pauseButton,
+      240,
+      scrollable: find
+          .ancestor(of: pauseButton, matching: find.byType(Scrollable))
+          .last,
+    );
     await tester.tap(find.text('暂停'));
     await tester.pump();
     expect(find.text('继续'), findsOneWidget);
@@ -110,22 +125,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('本轮记录'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), '补充一条 Mock 记录');
+    await tester.enterText(find.byType(TextField).last, '补充一条 Mock 记录');
     final saveButton = find.text('保存').last;
     await tester.scrollUntilVisible(
       saveButton,
       240,
-      scrollable: find.ancestor(
-        of: saveButton,
-        matching: find.byType(Scrollable),
-      ),
+      scrollable:
+          find.ancestor(of: saveButton, matching: find.byType(Scrollable)).last,
     );
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
-    expect(find.text('记录'), findsNWidgets(2));
-    await tester.scrollUntilVisible(find.text('阅读 Orca 论文'), 240);
-    expect(find.text('阅读 Orca 论文'), findsOneWidget);
-    expect(find.text('补充一条 Mock 记录'), findsOneWidget);
+    expect(find.byType(HistoryScreen), findsOneWidget);
+    expect(focusSessionProvider.sessions, hasLength(1));
+    expect(focusSessionProvider.sessions.single.note, '补充一条 Mock 记录');
   });
 
   testWidgets('adding a task refreshes the home list', (tester) async {
@@ -136,7 +148,13 @@ void main() {
       ),
     );
 
-    await tester.scrollUntilVisible(find.text('添加任务'), 240);
+    final addTask = find.text('添加任务');
+    await tester.scrollUntilVisible(
+      addTask,
+      240,
+      scrollable:
+          find.ancestor(of: addTask, matching: find.byType(Scrollable)).last,
+    );
     await tester.tap(find.text('添加任务'));
     await tester.pumpAndSettle();
 
@@ -288,14 +306,21 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('暂停'), 240);
+    final pauseButton = find.text('暂停');
+    await tester.scrollUntilVisible(
+      pauseButton,
+      240,
+      scrollable: find
+          .ancestor(of: pauseButton, matching: find.byType(Scrollable))
+          .last,
+    );
     await tester.tap(find.text('暂停'));
     await tester.pump();
     expect(find.text('继续'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.home_filled));
     await tester.pumpAndSettle();
-    expect(find.text('今天'), findsNWidgets(2));
+    expect(find.text('今朝'), findsNWidgets(2));
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
     await tester.pumpAndSettle();

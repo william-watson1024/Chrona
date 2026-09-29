@@ -167,9 +167,9 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '${_formatTime(widget.session.startedAt)} - '
-                      '${_formatTime(widget.session.endedAt)} · '
-                      '${_formatDuration(widget.session.actualDurationSeconds)}',
+                      '${formatFocusTime(widget.session.startedAt)} - '
+                      '${formatFocusTime(widget.session.endedAt)} · '
+                      '${formatFocusDuration(widget.session.actualDurationSeconds)}',
                       style: const TextStyle(
                           color: Color(0xFF8B8B8B), fontSize: 20, height: 1.1),
                     ),
@@ -258,14 +258,6 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         ),
       ),
     );
-  }
-
-  String _formatTime(DateTime time) {
-    return formatFocusTime(time);
-  }
-
-  String _formatDuration(int seconds) {
-    return formatFocusDuration(seconds);
   }
 }
 

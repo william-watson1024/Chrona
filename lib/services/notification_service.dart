@@ -21,7 +21,8 @@ class NotificationService {
   static const String breakChannelId = 'chrona_break_alerts_v2';
   static const String _stopReminderActionId = 'stop_focus_reminder';
   static const AndroidNotificationSound _systemDefaultSound =
-      UriAndroidNotificationSound('content://settings/system/notification_sound');
+      UriAndroidNotificationSound(
+          'content://settings/system/notification_sound');
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();

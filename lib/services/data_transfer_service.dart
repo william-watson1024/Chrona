@@ -50,13 +50,15 @@ class DataTransferService {
 
     final bytes = result.files.single.bytes;
     if (bytes == null) {
-      throw const FormatException('\u65e0\u6cd5\u8bfb\u53d6\u5907\u4efd\u6587\u4ef6');
+      throw const FormatException(
+          '\u65e0\u6cd5\u8bfb\u53d6\u5907\u4efd\u6587\u4ef6');
     }
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map ||
         decoded['format'] != 'chrona_backup' ||
         decoded['version'] != 1) {
-      throw const FormatException('\u4e0d\u662f\u6709\u6548\u7684\u62fe\u5e74\u6570\u636e\u6587\u4ef6');
+      throw const FormatException(
+          '\u4e0d\u662f\u6709\u6548\u7684\u62fe\u5e74\u6570\u636e\u6587\u4ef6');
     }
     return Map<String, dynamic>.from(decoded);
   }

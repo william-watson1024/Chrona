@@ -1,4 +1,6 @@
 class Task {
+  static const Object _copyWithUnset = Object();
+
   const Task({
     this.id,
     required this.title,
@@ -26,8 +28,8 @@ class Task {
       );
 
   factory Task.fromMap(Map<String, Object?> map) {
-    final createdAt = _readInt(map['created_at']) ??
-        DateTime.now().millisecondsSinceEpoch;
+    final createdAt =
+        _readInt(map['created_at']) ?? DateTime.now().millisecondsSinceEpoch;
     return Task(
       id: _readInt(map['id']),
       title: map['title'] as String? ?? '未命名任务',
@@ -60,24 +62,26 @@ class Task {
   Task copyWith({
     int? id,
     String? title,
-    String? note,
+    Object? note = _copyWithUnset,
     bool? completed,
     int? createdAt,
     int? completedAt,
     int? durationSeconds,
-    DateTime? planDate,
+    Object? planDate = _copyWithUnset,
     int? sortOrder,
     bool clearCompletedAt = false,
   }) {
     return Task(
       id: id ?? this.id,
       title: title ?? this.title,
-      note: note ?? this.note,
+      note: identical(note, _copyWithUnset) ? this.note : note as String?,
       completed: completed ?? this.completed,
       createdAt: createdAt ?? this.createdAt,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       durationSeconds: durationSeconds ?? this.durationSeconds,
-      planDate: planDate ?? this.planDate,
+      planDate: identical(planDate, _copyWithUnset)
+          ? this.planDate
+          : planDate as DateTime?,
       sortOrder: sortOrder ?? this.sortOrder,
     );
   }

@@ -143,7 +143,8 @@ class _SettingsContentState extends State<_SettingsContent> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('\u5bfc\u51fa\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5'),
+          content: Text(
+              '\u5bfc\u51fa\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5'),
         ),
       );
     } finally {
@@ -207,13 +208,15 @@ class _SettingsContentState extends State<_SettingsContent> {
     } on FormatException {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('\u5907\u4efd\u6587\u4ef6\u683c\u5f0f\u65e0\u6548')),
+        const SnackBar(
+            content: Text('\u5907\u4efd\u6587\u4ef6\u683c\u5f0f\u65e0\u6548')),
       );
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('\u5bfc\u5165\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6'),
+          content: Text(
+              '\u5bfc\u5165\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6'),
         ),
       );
     } finally {
