@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/focus_settings_provider.dart';
 import '../../services/birthday_settings.dart';
 import '../../services/data_transfer_service.dart';
+import '../../widgets/chrona_date_picker.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 
@@ -252,14 +253,14 @@ class _SettingsContentState extends State<_SettingsContent> {
 
   Future<void> _pickBirthday(BuildContext context) async {
     final initialDate = _birthday ?? DateTime(2000, 1, 1);
-    final picked = await showDatePicker(
+    final picked = await showDialog<DateTime>(
       context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100),
-      helpText: '选择生日',
-      cancelText: '取消',
-      confirmText: '确定',
+      barrierDismissible: false,
+      builder: (_) => ChronaDatePickerDialog(
+        initialDate: initialDate,
+        showRelativeActions: false,
+        confirmLabel: '确定',
+      ),
     );
     if (picked == null) return;
     await BirthdaySettings.save(month: picked.month, day: picked.day);
@@ -416,13 +417,26 @@ class _BirthdaySetting extends StatelessWidget {
         child: Row(
           children: [
             const Expanded(
-              child: Text(
-                '生日',
-                style: TextStyle(
-                  color: Color(0xFF111111),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '生日',
+                    style: TextStyle(
+                      color: Color(0xFF111111),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '生日当天会有特定的问答',
+                    style: TextStyle(
+                      color: Color(0xFF858585),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ),
             ),
             Text(
