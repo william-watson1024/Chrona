@@ -708,6 +708,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
   String? _appliedDate;
   bool _hasLocalEdits = false;
   bool _applyingEntry = false;
+  bool _isChangingQuestion = false;
 
   @override
   void initState() {
@@ -764,6 +765,79 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
             content: Text(
                 '\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
       );
+    }
+  }
+
+  Future<void> _randomizeQuestion() async {
+    if (_isChangingQuestion) return;
+    if (_questionController.text.trim().isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: const Text('\u6362\u4e00\u4e2a\u95ee\u9898'),
+          content: const Text(
+            '\u66f4\u6362\u95ee\u9898\u4e0d\u4f1a\u6e05\u7a7a\u5f53\u524d\u56de\u7b54\uff0c\u662f\u5426\u7ee7\u7eed\uff1f',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('\u53d6\u6d88'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF111111),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('\u7ee7\u7eed'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() => _isChangingQuestion = true);
+    try {
+      await _journalProvider.replaceQuestionWithRandom();
+      if (!mounted) return;
+      setState(() {
+        _questionText = _journalProvider.questionText;
+        _hasLocalEdits = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                '\u6362\u9898\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
+      );
+    } finally {
+      if (mounted) setState(() => _isChangingQuestion = false);
+    }
+  }
+
+  Future<void> _restoreDefaultQuestion() async {
+    if (_isChangingQuestion) return;
+    setState(() => _isChangingQuestion = true);
+    try {
+      await _journalProvider.restoreDefaultQuestion();
+      if (!mounted) return;
+      setState(() {
+        _questionText = _journalProvider.questionText;
+        _hasLocalEdits = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                '\u6062\u590d\u9ed8\u8ba4\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5')),
+      );
+    } finally {
+      if (mounted) setState(() => _isChangingQuestion = false);
     }
   }
 
@@ -880,12 +954,41 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
                 _DiaryCard(
                   icon: Icons.wb_sunny_outlined,
                   title: '\u6bcf\u65e5\u4e00\u95ee',
-                  trailing: IconButton(
-                    onPressed: _changeQuestion,
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    tooltip: '\u66f4\u6362\u95ee\u9898',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed:
+                            _isChangingQuestion ? null : _randomizeQuestion,
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF555555),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('\u6362\u4e00\u4e2a'),
+                      ),
+                      if (_journalProvider.dailyQuestion?.isModified == true)
+                        TextButton(
+                          onPressed: _isChangingQuestion
+                              ? null
+                              : _restoreDefaultQuestion,
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF555555),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('\u6062\u590d\u9ed8\u8ba4'),
+                        ),
+                      IconButton(
+                        onPressed: _isChangingQuestion ? null : _changeQuestion,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        tooltip: '\u4fee\u6539\u95ee\u9898',
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,6 @@
 # 数据库迁移记录
 
-以下记录根据 `lib/database/app_database.dart` 中的 `openDatabase(... version: 7 ...)` 和 `onUpgrade` 逻辑整理。
+以下记录根据 `lib/database/app_database.dart` 中的 `openDatabase(... version: 8 ...)` 和 `onUpgrade` 逻辑整理。
 
 ## 版本变化
 

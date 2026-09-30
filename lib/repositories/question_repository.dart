@@ -12,11 +12,14 @@ class QuestionRepository {
 
   static const dailyAsset = 'assets/question/拾年每日一问.json';
   static const specialAsset = 'assets/question/特殊日期每日一问.json';
+  static const randomAsset = 'assets/question/拾年随机问题池_4000.json';
 
   final Future<String> Function(String asset) _assetLoader;
   Map<String, dynamic>? _daily;
   Map<String, dynamic>? _special;
   Future<void>? _loading;
+  List<RandomQuestionDefinition>? _randomQuestions;
+  Future<void>? _randomLoading;
 
   Future<QuestionDefinition?> dailyQuestion(DateTime date) async {
     await _load();
@@ -69,6 +72,11 @@ class QuestionRepository {
     return matches.first.definition;
   }
 
+  Future<List<RandomQuestionDefinition>> randomQuestions() async {
+    await _loadRandomQuestions();
+    return _randomQuestions!;
+  }
+
   Future<void> _load() async {
     if (_daily != null && _special != null) return;
     final loading = _loading;
@@ -93,6 +101,47 @@ class QuestionRepository {
     }
     _daily = Map<String, dynamic>.from(daily);
     _special = Map<String, dynamic>.from(special);
+  }
+
+  Future<void> _loadRandomQuestions() async {
+    if (_randomQuestions != null) return;
+    final loading = _randomLoading;
+    if (loading != null) return loading;
+
+    final future = _loadRandomAsset();
+    _randomLoading = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_randomLoading, future)) _randomLoading = null;
+    }
+  }
+
+  Future<void> _loadRandomAsset() async {
+    final decoded = jsonDecode(await _assetLoader(randomAsset));
+    if (decoded is! Map || decoded['questions'] is! List) {
+      throw const FormatException('Invalid CHRONA random question asset');
+    }
+
+    final ids = <String>{};
+    final questions = <RandomQuestionDefinition>[];
+    for (final item in decoded['questions'] as List) {
+      if (item is! Map) continue;
+      final definition = Map<String, dynamic>.from(item);
+      final id = definition['id']?.toString().trim() ?? '';
+      final theme = definition['theme']?.toString().trim() ?? '';
+      final question = definition['question']?.toString().trim() ?? '';
+      if (id.isEmpty || question.isEmpty || !ids.add(id)) continue;
+      questions.add(RandomQuestionDefinition(
+        id: id,
+        theme: theme,
+        questionText: question,
+      ));
+    }
+    if (questions.isEmpty) {
+      throw const FormatException('Random question asset is empty');
+    }
+    _randomQuestions = List.unmodifiable(questions);
   }
 
   bool _matches(

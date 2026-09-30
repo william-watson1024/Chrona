@@ -50,6 +50,8 @@ class DailyQuestion {
 
   DailyQuestion copyWith({
     int? id,
+    String? sourceType,
+    String? sourceKey,
     String? questionText,
     bool? isModified,
     DateTime? updatedAt,
@@ -57,8 +59,8 @@ class DailyQuestion {
     return DailyQuestion(
       id: id ?? this.id,
       entryDate: entryDate,
-      sourceType: sourceType,
-      sourceKey: sourceKey,
+      sourceType: sourceType ?? this.sourceType,
+      sourceKey: sourceKey ?? this.sourceKey,
       originalQuestionText: originalQuestionText,
       questionText: questionText ?? this.questionText,
       isModified: isModified ?? this.isModified,
@@ -78,6 +80,18 @@ class QuestionDefinition {
   final String questionText;
   final String sourceType;
   final String? sourceKey;
+}
+
+class RandomQuestionDefinition {
+  const RandomQuestionDefinition({
+    required this.id,
+    required this.theme,
+    required this.questionText,
+  });
+
+  final String id;
+  final String theme;
+  final String questionText;
 }
 
 int? _readInt(Object? value) {

@@ -1,6 +1,10 @@
+import 'dart:math';
+
+import 'package:chrona/models/daily_question.dart';
 import 'package:chrona/repositories/question_repository.dart';
 import 'package:chrona/services/birthday_settings.dart';
 import 'package:chrona/services/question_resolver.dart';
+import 'package:chrona/services/question_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,5 +51,63 @@ void main() {
 
     expect(ordinary, isNotNull);
     expect(leapYear, isNotNull);
+  });
+
+  test('loads the random question pool with unique non-empty questions',
+      () async {
+    final questions = await repository.randomQuestions();
+    expect(questions.length, greaterThan(0));
+    expect(questions.map((question) => question.id).toSet().length,
+        questions.length);
+    expect(questions.every((question) => question.questionText.isNotEmpty),
+        isTrue);
+  });
+
+  test('caches the random pool after the first load', () async {
+    var loadCount = 0;
+    final cachedRepository = QuestionRepository(
+      assetLoader: (asset) async {
+        expect(asset, QuestionRepository.randomAsset);
+        loadCount++;
+        return '{"questions":[{"id":"RTEST","theme":"测试","question":"缓存测试问题"}]}';
+      },
+    );
+
+    await cachedRepository.randomQuestions();
+    await cachedRepository.randomQuestions();
+
+    expect(loadCount, 1);
+  });
+
+  test('random selection avoids the current and recent questions', () {
+    final service = QuestionService(random: Random(7));
+    final pool = [
+      const RandomQuestionDefinition(
+        id: 'R0001',
+        theme: '测试',
+        questionText: '随机问题 B',
+      ),
+      const RandomQuestionDefinition(
+        id: 'R0002',
+        theme: '测试',
+        questionText: '随机问题 C',
+      ),
+      const RandomQuestionDefinition(
+        id: 'R0003',
+        theme: '测试',
+        questionText: '随机问题 D',
+      ),
+    ];
+    final first = service.selectRandomQuestion(
+      pool: pool,
+      currentQuestion: '当天默认问题 A',
+    );
+    final second = service.selectRandomQuestion(
+      pool: pool,
+      currentQuestion: first.questionText,
+    );
+
+    expect(first.questionText, isNot('当天默认问题 A'));
+    expect(second.questionText, isNot(first.questionText));
   });
 }

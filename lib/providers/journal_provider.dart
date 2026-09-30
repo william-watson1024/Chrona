@@ -148,6 +148,42 @@ class JournalProvider extends ChangeNotifier {
     _notifyListeners();
   }
 
+  Future<void> replaceQuestionWithRandom() async {
+    final date = _loadedDate == null ? null : DateTime.parse(_loadedDate!);
+    if (date == null) return;
+    _dailyQuestion = await _questionService.replaceWithRandomQuestion(date);
+    _draftQuestionText = _dailyQuestion!.questionText;
+    await _persistQuestionReference();
+    _notifyListeners();
+  }
+
+  Future<void> restoreDefaultQuestion() async {
+    final date = _loadedDate == null ? null : DateTime.parse(_loadedDate!);
+    if (date == null) return;
+    _dailyQuestion = await _questionService.restoreDefaultQuestion(date);
+    _draftQuestionText = _dailyQuestion!.questionText;
+    await _persistQuestionReference();
+    _notifyListeners();
+  }
+
+  Future<void> _persistQuestionReference() async {
+    final current = _entry;
+    final question = _dailyQuestion;
+    if (current == null || question == null) return;
+    _entry = await _database.saveJournal(
+      JournalEntry(
+        id: current.id,
+        entryDate: current.entryDate,
+        questionId: question.id,
+        questionText: null,
+        questionAnswer: current.questionAnswer,
+        content: current.content,
+        createdAt: current.createdAt,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
   void _notifyListeners() {
     if (!_disposed) notifyListeners();
   }

@@ -22,6 +22,10 @@ class QuestionResolver {
         sourceKey: saved.sourceKey,
       );
     }
+    return resolveDefaultQuestion(date);
+  }
+
+  Future<QuestionDefinition?> resolveDefaultQuestion(DateTime date) async {
     final birthday = await BirthdaySettings.load();
     final birthdayOrSpecial = await _repository.specialQuestion(
       date,
