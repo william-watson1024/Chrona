@@ -321,8 +321,10 @@ class _TodayTabContent extends StatelessWidget {
           itemCount: 40001,
           onPageChanged: onPageChanged,
           itemBuilder: (context, page) {
+            final date = dateForPage(page);
             return _TodayHomeContent(
-              selectedDate: dateForPage(page),
+              key: ValueKey(JournalEntry.dateKey(date)),
+              selectedDate: date,
               onStartFocus: onStartFocus,
               onOpenDatePicker: onOpenDatePicker,
               onOpenSettings: onOpenSettings,
@@ -353,6 +355,7 @@ class _TodayTabContent extends StatelessWidget {
 
 class _TodayHomeContent extends StatelessWidget {
   const _TodayHomeContent({
+    super.key,
     required this.selectedDate,
     required this.onStartFocus,
     required this.onOpenDatePicker,
@@ -409,38 +412,42 @@ class _TodayHomeContent extends StatelessWidget {
         ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          sliver: SliverToBoxAdapter(
-            child: ReorderableListView.builder(
-              key: ValueKey(
-                '${JournalEntry.dateKey(selectedDate)}:'
-                '${tasks.map((task) => task.id ?? task.createdAt).join(',')}',
-              ),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              itemCount: tasks.length,
-              onReorderItem: (oldIndex, newIndex) {
-                taskProvider.reorderTasksForDate(
-                  selectedDate,
-                  oldIndex,
-                  newIndex,
-                );
-              },
-              itemBuilder: (context, index) {
-                final task = tasks[index];
-                return ReorderableDelayedDragStartListener(
-                  key: ValueKey(task.id ?? task.createdAt),
-                  index: index,
-                  child: _TaskRow(
-                    task: task,
-                    onTap: () => _openTask(context, task),
-                    onToggle: () => taskProvider.toggleTask(task),
-                    onDelete: () => _confirmDelete(context, task),
-                    onStart: task.completed ? null : () => onStartFocus(task),
-                  ),
-                );
-              },
+          sliver: SliverReorderableList(
+            key: ValueKey(JournalEntry.dateKey(selectedDate)),
+            itemCount: tasks.length,
+            findChildIndexCallback: (key) {
+              if (key is! ValueKey<int>) return null;
+              final index = tasks.indexWhere(
+                (task) => (task.id ?? task.createdAt) == key.value,
+              );
+              return index == -1 ? null : index;
+            },
+            onReorderItem: (oldIndex, newIndex) {
+              taskProvider.reorderTasksForDate(
+                selectedDate,
+                oldIndex,
+                newIndex,
+              );
+            },
+            proxyDecorator: (child, index, animation) => Material(
+              color: Colors.white,
+              elevation: 0,
+              child: child,
             ),
+            itemBuilder: (context, index) {
+              final task = tasks[index];
+              return ReorderableDelayedDragStartListener(
+                key: ValueKey(task.id ?? task.createdAt),
+                index: index,
+                child: _TaskRow(
+                  task: task,
+                  onTap: () => _openTask(context, task),
+                  onToggle: () => taskProvider.toggleTask(task),
+                  onDelete: () => _confirmDelete(context, task),
+                  onStart: task.completed ? null : () => onStartFocus(task),
+                ),
+              );
+            },
           ),
         ),
         SliverPadding(

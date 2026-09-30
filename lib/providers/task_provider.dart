@@ -20,6 +20,7 @@ class TaskProvider extends ChangeNotifier {
 
   final AppDatabase _database;
   final List<Task> _tasks;
+  Future<void>? _loadingTasks;
   bool _isLoaded = false;
   bool _isInMemory = false;
   int _nextInMemoryId = -1;
@@ -40,9 +41,19 @@ class TaskProvider extends ChangeNotifier {
     return tasksForDate(date).where((task) => task.completed).length;
   }
 
-  Future<void> loadTasks() async {
-    if (_isLoaded || _isInMemory) return;
+  Future<void> loadTasks() {
+    if (_isLoaded || _isInMemory) return Future<void>.value();
+    final loading = _loadingTasks;
+    if (loading != null) return loading;
 
+    final future = _loadTasks();
+    _loadingTasks = future;
+    return future.whenComplete(() {
+      if (identical(_loadingTasks, future)) _loadingTasks = null;
+    });
+  }
+
+  Future<void> _loadTasks() async {
     try {
       _tasks
         ..clear()
@@ -126,13 +137,24 @@ class TaskProvider extends ChangeNotifier {
         ordered[index].copyWith(sortOrder: index),
     ];
 
-    if (!_isInMemory) await _database.updateTaskOrders(updated);
+    final previousTasks = List<Task>.from(_tasks);
     for (final task in updated) {
       final index = _tasks.indexWhere((item) => item.id == task.id);
       if (index >= 0) _tasks[index] = task;
     }
     _sortTasks();
     notifyListeners();
+
+    try {
+      if (!_isInMemory) await _database.updateTaskOrders(updated);
+    } catch (error) {
+      _tasks
+        ..clear()
+        ..addAll(previousTasks);
+      _sortTasks();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> deleteTask(Task task) async {
