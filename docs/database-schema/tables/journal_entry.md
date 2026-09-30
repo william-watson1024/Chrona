@@ -20,3 +20,5 @@
 - `entry_date` 的 `UNIQUE` 约束保证每天最多一条日记。
 - 保存日记时，应用先按 `entry_date` 查找；不存在则插入，存在则更新。
 - 查询日记默认按 `entry_date DESC, id DESC` 排序。
+- `question_id` 逻辑关联 `daily_question.id`，新代码以 `daily_question` 作为正式问题来源。
+- `question_text` 保留用于旧版本数据和备份恢复兼容，新代码不再把它作为正式问题来源。

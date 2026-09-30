@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/focus_settings_provider.dart';
+import '../../services/birthday_settings.dart';
 import '../../services/data_transfer_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
@@ -40,6 +41,23 @@ class _SettingsContentState extends State<_SettingsContent> {
 
   final _dataTransferService = DataTransferService();
   bool _isTransferring = false;
+  DateTime? _birthday;
+  bool _birthdayLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBirthday();
+  }
+
+  Future<void> _loadBirthday() async {
+    final birthday = await BirthdaySettings.load();
+    if (!mounted) return;
+    setState(() {
+      _birthday = birthday;
+      _birthdayLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +98,13 @@ class _SettingsContentState extends State<_SettingsContent> {
                         value: settings.breakDurationSeconds,
                         options: _breakOptions,
                         onChanged: settings.updateBreakDuration,
+                      ),
+                      const SizedBox(height: 44),
+                      _BirthdaySetting(
+                        birthday: _birthday,
+                        loading: _birthdayLoading,
+                        onTap: () => _pickBirthday(context),
+                        onClear: _birthday == null ? null : _clearBirthday,
                       ),
                       const SizedBox(height: 52),
                       const Text(
@@ -190,6 +215,7 @@ class _SettingsContentState extends State<_SettingsContent> {
       if (confirmed != true || !context.mounted) return;
 
       await _dataTransferService.importData(payload);
+      await _loadBirthday();
       final importedSettings = payload['settings'];
       if (importedSettings is Map &&
           importedSettings['break_duration_seconds'] is num) {
@@ -222,6 +248,29 @@ class _SettingsContentState extends State<_SettingsContent> {
     } finally {
       if (mounted) setState(() => _isTransferring = false);
     }
+  }
+
+  Future<void> _pickBirthday(BuildContext context) async {
+    final initialDate = _birthday ?? DateTime(2000, 1, 1);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+      helpText: '选择生日',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked == null) return;
+    await BirthdaySettings.save(month: picked.month, day: picked.day);
+    if (!mounted) return;
+    setState(() => _birthday = DateTime(2000, picked.month, picked.day));
+  }
+
+  Future<void> _clearBirthday() async {
+    await BirthdaySettings.clear();
+    if (!mounted) return;
+    setState(() => _birthday = null);
   }
 }
 
@@ -337,5 +386,63 @@ class _DurationSetting extends StatelessWidget {
   String _formatDuration(int seconds) {
     if (seconds < 60) return '$seconds \u79d2';
     return '${seconds ~/ 60} \u5206\u949f';
+  }
+}
+
+class _BirthdaySetting extends StatelessWidget {
+  const _BirthdaySetting({
+    required this.birthday,
+    required this.loading,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final DateTime? birthday;
+  final bool loading;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = loading
+        ? '读取中…'
+        : birthday == null
+            ? '未设置'
+            : '${birthday!.month}月${birthday!.day}日';
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '生日',
+                style: TextStyle(
+                  color: Color(0xFF111111),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(color: Color(0xFF858585), fontSize: 16),
+            ),
+            const SizedBox(width: 5),
+            if (onClear != null)
+              IconButton(
+                onPressed: onClear,
+                tooltip: '清除生日',
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close, size: 18),
+              )
+            else
+              const Icon(Icons.chevron_right, color: Color(0xFF858585)),
+          ],
+        ),
+      ),
+    );
   }
 }

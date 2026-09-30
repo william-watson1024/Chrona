@@ -1,6 +1,6 @@
 -- CHRONA SQLite schema snapshot
 -- Source: lib/database/app_database.dart
--- Current application database version: 7
+-- Current application database version: 8
 
 CREATE TABLE IF NOT EXISTS task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS journal_entry (
     question_text TEXT,
     question_answer TEXT,
     content TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_question (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_date TEXT NOT NULL UNIQUE,
+    source_type TEXT NOT NULL,
+    source_key TEXT,
+    original_question_text TEXT NOT NULL,
+    question_text TEXT NOT NULL,
+    is_modified INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

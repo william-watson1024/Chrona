@@ -1,14 +1,20 @@
 import 'package:flutter/foundation.dart';
 
 import '../database/app_database.dart';
+import '../models/daily_question.dart';
 import '../models/journal_entry.dart';
+import '../services/question_service.dart';
 
 class JournalProvider extends ChangeNotifier {
-  JournalProvider({AppDatabase? database})
-      : _database = database ?? AppDatabase.instance;
+  JournalProvider({AppDatabase? database, QuestionService? questionService})
+      : _database = database ?? AppDatabase.instance,
+        _questionService =
+            questionService ?? QuestionService(database: database);
 
   final AppDatabase _database;
+  final QuestionService _questionService;
   JournalEntry? _entry;
+  DailyQuestion? _dailyQuestion;
   String? _loadedDate;
   String _draftQuestionText = JournalEntry.defaultQuestionText;
   bool _isLoading = false;
@@ -18,6 +24,7 @@ class JournalProvider extends ChangeNotifier {
   int _loadRequest = 0;
 
   JournalEntry? get entry => _entry;
+  DailyQuestion? get dailyQuestion => _dailyQuestion;
   String? get loadedDate => _loadedDate;
   String get questionText => _draftQuestionText;
   bool get isLoading => _isLoading;
@@ -34,13 +41,20 @@ class JournalProvider extends ChangeNotifier {
 
     try {
       final entry = await _database.getJournalByDate(date);
+      final savedQuestion = await _questionService.getSavedQuestion(date);
+      final resolved = savedQuestion == null
+          ? await _questionService.resolveQuestion(date)
+          : null;
       if (request != _loadRequest) return;
       _entry = entry;
-      _draftQuestionText =
-          JournalEntry.normalizeQuestionText(entry?.questionText);
+      _dailyQuestion = savedQuestion;
+      _draftQuestionText = savedQuestion?.questionText ??
+          (resolved?.questionText ??
+              JournalEntry.normalizeQuestionText(entry?.questionText));
     } catch (error) {
       if (request != _loadRequest) return;
       _entry = null;
+      _dailyQuestion = null;
       _draftQuestionText = JournalEntry.defaultQuestionText;
       _error = error.toString();
     } finally {
@@ -73,11 +87,18 @@ class JournalProvider extends ChangeNotifier {
     _notifyListeners();
     try {
       final existing = _entry ?? await _database.getJournalByDate(date);
+      final dailyQuestion = await _questionService.saveUserQuestion(
+        date: date,
+        questionText: questionText,
+      );
       final now = DateTime.now();
       final entry = JournalEntry(
         id: existing?.id,
         entryDate: JournalEntry.dateKey(date),
-        questionText: JournalEntry.normalizeQuestionText(questionText),
+        questionId: dailyQuestion.id,
+        // Kept nullable for backup compatibility. New writes use question_id
+        // and daily_question as the source of truth.
+        questionText: null,
         questionAnswer: _optionalText(questionAnswer),
         content: _optionalText(content),
         createdAt: existing?.createdAt ?? now,
@@ -85,6 +106,7 @@ class JournalProvider extends ChangeNotifier {
       );
       final saved = await _database.saveJournal(entry);
       _entry = saved;
+      _dailyQuestion = dailyQuestion;
       _loadedDate = saved.entryDate;
       _draftQuestionText =
           JournalEntry.normalizeQuestionText(saved.questionText);
@@ -99,25 +121,30 @@ class JournalProvider extends ChangeNotifier {
   Future<void> updateQuestion(String value) async {
     _draftQuestionText = JournalEntry.normalizeQuestionText(value);
 
-    final current = _entry;
-    if (current == null) {
+    final date = _loadedDate == null ? null : DateTime.parse(_loadedDate!);
+    if (date == null) {
       _notifyListeners();
       return;
     }
-
-    final updated = JournalEntry(
-      id: current.id,
-      entryDate: current.entryDate,
-      questionId: current.questionId,
+    _dailyQuestion = await _questionService.saveUserQuestion(
+      date: date,
       questionText: _draftQuestionText,
-      questionAnswer: current.questionAnswer,
-      content: current.content,
-      createdAt: current.createdAt,
-      updatedAt: DateTime.now(),
     );
-    // Upsert here as well, so a record deleted externally cannot make the
-    // question edit fail because its id is no longer present.
-    _entry = await _database.saveJournal(updated);
+    final current = _entry;
+    if (current != null) {
+      _entry = await _database.saveJournal(
+        JournalEntry(
+          id: current.id,
+          entryDate: current.entryDate,
+          questionId: _dailyQuestion!.id,
+          questionText: null,
+          questionAnswer: current.questionAnswer,
+          content: current.content,
+          createdAt: current.createdAt,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
     _notifyListeners();
   }
 

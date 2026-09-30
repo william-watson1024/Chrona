@@ -797,13 +797,21 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
       ),
     );
     if (value == null || !mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _questionText = JournalEntry.normalizeQuestionText(value);
-        _hasLocalEdits = true;
-      });
+    final normalized = JournalEntry.normalizeQuestionText(value);
+    setState(() {
+      _questionText = normalized;
+      _hasLocalEdits = true;
     });
+    try {
+      await _journalProvider.updateQuestion(normalized);
+      if (!mounted) return;
+      _hasLocalEdits = false;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('问题保存失败，请稍后重试')),
+      );
+    }
   }
 
   @override
@@ -821,7 +829,7 @@ class _TodayDiaryContentState extends State<_TodayDiaryContent> {
         if (_hasLocalEdits) return;
         final entry = _journalProvider.entry;
         _applyingEntry = true;
-        _questionText = JournalEntry.normalizeQuestionText(entry?.questionText);
+        _questionText = _journalProvider.questionText;
         _questionController.text = entry?.questionAnswer ?? '';
         _diaryController.text = entry?.content ?? '';
         _applyingEntry = false;

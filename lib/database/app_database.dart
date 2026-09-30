@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/daily_question.dart';
 import '../models/focus_session.dart';
 import '../models/journal_entry.dart';
 import '../models/task.dart';
@@ -34,7 +35,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     final database = await openDatabase(
       databasePath,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -53,6 +54,7 @@ class AppDatabase {
         await _insertInitialTasks(db);
         await _createFocusSessionTable(db);
         await _createJournalEntryTable(db);
+        await _createDailyQuestionTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -118,6 +120,9 @@ class AppDatabase {
         if (oldVersion < 7) {
           await _createJournalEntryTable(db);
         }
+        if (oldVersion < 8) {
+          await _migrateDailyQuestions(db);
+        }
       },
     );
     _database = database;
@@ -136,8 +141,10 @@ class AppDatabase {
   Future<Map<String, dynamic>> exportData() async {
     final db = await database;
     await _createJournalEntryTable(db);
+    await _createDailyQuestionTable(db);
     final tasks = await db.query('task', orderBy: 'id ASC');
     final sessions = await db.query('focus_session', orderBy: 'id ASC');
+    final dailyQuestions = await db.query('daily_question', orderBy: 'id ASC');
     final journals = await db.query('journal_entry', orderBy: 'id ASC');
 
     return {
@@ -147,6 +154,8 @@ class AppDatabase {
       'tasks': tasks.map((row) => Map<String, dynamic>.from(row)).toList(),
       'focus_sessions':
           sessions.map((row) => Map<String, dynamic>.from(row)).toList(),
+      'daily_questions':
+          dailyQuestions.map((row) => Map<String, dynamic>.from(row)).toList(),
       'journal_entries':
           journals.map((row) => Map<String, dynamic>.from(row)).toList(),
     };
@@ -159,12 +168,18 @@ class AppDatabase {
 
     final tasks = _backupRows(payload['tasks'], 'tasks');
     final sessions = _backupRows(payload['focus_sessions'], 'focus_sessions');
+    final dailyQuestions = _backupRows(
+      payload['daily_questions'] ?? const [],
+      'daily_questions',
+    );
     final journals = _backupRows(payload['journal_entries'], 'journal_entries');
     final db = await database;
     await _createJournalEntryTable(db);
+    await _createDailyQuestionTable(db);
 
     await db.transaction((txn) async {
       await txn.delete('journal_entry');
+      await txn.delete('daily_question');
       await txn.delete('focus_session');
       await txn.delete('task');
 
@@ -174,8 +189,41 @@ class AppDatabase {
       for (final row in sessions) {
         await txn.insert('focus_session', _focusSessionBackupValues(row));
       }
+      final questionIdsByDate = <String, int>{};
+      for (final row in dailyQuestions) {
+        final values = _dailyQuestionBackupValues(row);
+        final id = await txn.insert('daily_question', values);
+        questionIdsByDate[values['entry_date']! as String] = id;
+      }
       for (final row in journals) {
-        await txn.insert('journal_entry', _journalBackupValues(row));
+        final values = _journalBackupValues(row);
+        var questionId = _readInt(values['question_id']);
+        final entryDate = values['entry_date']! as String;
+        if (questionId == null ||
+            !questionIdsByDate.values.contains(questionId)) {
+          final legacyText = values['question_text'] as String?;
+          if (legacyText != null && legacyText.trim().isNotEmpty) {
+            questionId = questionIdsByDate[entryDate];
+            if (questionId == null) {
+              final now = _readInt(values['updated_at']) ??
+                  _readInt(values['created_at']) ??
+                  DateTime.now().millisecondsSinceEpoch;
+              questionId = await txn.insert('daily_question', {
+                'entry_date': entryDate,
+                'source_type': 'CUSTOM',
+                'source_key': 'legacy',
+                'original_question_text': legacyText,
+                'question_text': legacyText,
+                'is_modified': 0,
+                'created_at': _readInt(values['created_at']) ?? now,
+                'updated_at': now,
+              });
+              questionIdsByDate[entryDate] = questionId;
+            }
+          }
+        }
+        values['question_id'] = questionId;
+        await txn.insert('journal_entry', values);
       }
     });
   }
@@ -267,6 +315,55 @@ class AppDatabase {
     return rows.map(JournalEntry.fromMap).toList(growable: false);
   }
 
+  Future<DailyQuestion?> getDailyQuestionByDate(DateTime date) async {
+    final db = await database;
+    await _createDailyQuestionTable(db);
+    final rows = await db.query(
+      'daily_question',
+      where: 'entry_date = ?',
+      whereArgs: [JournalEntry.dateKey(date)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return DailyQuestion.fromMap(rows.first);
+  }
+
+  Future<List<DailyQuestion>> getDailyQuestions() async {
+    final db = await database;
+    await _createDailyQuestionTable(db);
+    final rows = await db.query(
+      'daily_question',
+      orderBy: 'entry_date ASC, id ASC',
+    );
+    return rows.map(DailyQuestion.fromMap).toList(growable: false);
+  }
+
+  Future<DailyQuestion> saveDailyQuestion(DailyQuestion question) async {
+    final db = await database;
+    await _createDailyQuestionTable(db);
+    final existingRows = await db.query(
+      'daily_question',
+      where: 'entry_date = ?',
+      whereArgs: [question.entryDate],
+      limit: 1,
+    );
+    if (existingRows.isEmpty) {
+      final id = await db.insert(
+        'daily_question',
+        question.toMap()..remove('id'),
+      );
+      return question.copyWith(id: id);
+    }
+    final existing = DailyQuestion.fromMap(existingRows.first);
+    await db.update(
+      'daily_question',
+      question.toMap()..remove('id'),
+      where: 'id = ?',
+      whereArgs: [existing.id],
+    );
+    return question.copyWith(id: existing.id);
+  }
+
   Future<JournalEntry> saveJournal(JournalEntry entry) async {
     final db = await database;
     await _createJournalEntryTable(db);
@@ -344,6 +441,70 @@ class AppDatabase {
         updated_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  Future<void> _createDailyQuestionTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS daily_question (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_date TEXT NOT NULL UNIQUE,
+        source_type TEXT NOT NULL,
+        source_key TEXT,
+        original_question_text TEXT NOT NULL,
+        question_text TEXT NOT NULL,
+        is_modified INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _migrateDailyQuestions(Database db) async {
+    await _createDailyQuestionTable(db);
+    final rows = await db.query(
+      'journal_entry',
+      columns: [
+        'id',
+        'entry_date',
+        'question_text',
+        'created_at',
+        'updated_at',
+      ],
+    );
+    for (final row in rows) {
+      final text = row['question_text'] as String?;
+      final entryDate = row['entry_date'] as String?;
+      if (entryDate == null || text == null || text.trim().isEmpty) continue;
+      final existing = await db.query(
+        'daily_question',
+        columns: ['id'],
+        where: 'entry_date = ?',
+        whereArgs: [entryDate],
+        limit: 1,
+      );
+      final questionId = existing.isNotEmpty
+          ? _readInt(existing.first['id'])
+          : await db.insert('daily_question', {
+              'entry_date': entryDate,
+              'source_type': 'CUSTOM',
+              'source_key': 'legacy',
+              'original_question_text': text,
+              'question_text': text,
+              'is_modified': 0,
+              'created_at': _readInt(row['created_at']) ??
+                  DateTime.now().millisecondsSinceEpoch,
+              'updated_at': _readInt(row['updated_at']) ??
+                  DateTime.now().millisecondsSinceEpoch,
+            });
+      if (questionId != null) {
+        await db.update(
+          'journal_entry',
+          {'question_id': questionId},
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+    }
   }
 
   Future<void> _repairNullValues(Database db) async {
@@ -536,6 +697,39 @@ Map<String, Object?> _journalBackupValues(Map<String, dynamic> row) {
     'question_text': row['question_text'] as String?,
     'question_answer': row['question_answer'] as String?,
     'content': row['content'] as String?,
+    'created_at': _readInt(row['created_at']) ?? now,
+    'updated_at': _readInt(row['updated_at']) ?? now,
+  };
+}
+
+Map<String, Object?> _dailyQuestionBackupValues(Map<String, dynamic> row) {
+  final entryDate = row['entry_date'] as String?;
+  if (entryDate == null || !_isValidDateKey(entryDate)) {
+    throw const FormatException('Invalid daily question date');
+  }
+  final original = row['original_question_text'] as String?;
+  final question = row['question_text'] as String?;
+  if (original == null ||
+      original.trim().isEmpty ||
+      question == null ||
+      question.trim().isEmpty) {
+    throw const FormatException('Invalid daily question text');
+  }
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final id = _readInt(row['id']);
+  final sourceType = row['source_type'] as String? ?? 'CUSTOM';
+  const sourceTypes = {'DAILY', 'SPECIAL', 'BIRTHDAY', 'CUSTOM'};
+  if (!sourceTypes.contains(sourceType)) {
+    throw const FormatException('Invalid daily question source type');
+  }
+  return {
+    if (id != null) 'id': id,
+    'entry_date': entryDate,
+    'source_type': sourceType,
+    'source_key': row['source_key'] as String?,
+    'original_question_text': original,
+    'question_text': question,
+    'is_modified': _backupBool(row['is_modified']),
     'created_at': _readInt(row['created_at']) ?? now,
     'updated_at': _readInt(row['updated_at']) ?? now,
   };

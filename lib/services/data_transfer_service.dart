@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
+import 'birthday_settings.dart';
 
 class DataTransferService {
   DataTransferService({AppDatabase? database})
@@ -16,9 +17,13 @@ class DataTransferService {
     final payload = await _database.exportData();
     final preferences = await SharedPreferences.getInstance();
     final breakDuration = preferences.getInt('break_duration_seconds');
-    if (breakDuration != null) {
+    final birthdayMonth = preferences.getInt(BirthdaySettings.birthdayMonthKey);
+    final birthdayDay = preferences.getInt(BirthdaySettings.birthdayDayKey);
+    if (breakDuration != null || birthdayMonth != null || birthdayDay != null) {
       payload['settings'] = {
-        'break_duration_seconds': breakDuration,
+        if (breakDuration != null) 'break_duration_seconds': breakDuration,
+        if (birthdayMonth != null) 'birthday_month': birthdayMonth,
+        if (birthdayDay != null) 'birthday_day': birthdayDay,
       };
     }
 
@@ -74,6 +79,14 @@ class DataTransferService {
         await preferences.setInt(
           'break_duration_seconds',
           breakDuration.toInt(),
+        );
+      }
+      final birthdayMonth = settings['birthday_month'];
+      final birthdayDay = settings['birthday_day'];
+      if (birthdayMonth is num && birthdayDay is num) {
+        await BirthdaySettings.save(
+          month: birthdayMonth.toInt(),
+          day: birthdayDay.toInt(),
         );
       }
     }
