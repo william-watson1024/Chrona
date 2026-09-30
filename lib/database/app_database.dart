@@ -35,7 +35,7 @@ class AppDatabase {
     final databasePath = join(databaseDirectory, 'chrona.db');
     final database = await openDatabase(
       databasePath,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE task (
@@ -51,7 +51,6 @@ class AppDatabase {
           )
         ''');
 
-        await _insertInitialTasks(db);
         await _createFocusSessionTable(db);
         await _createJournalEntryTable(db);
         await _createDailyQuestionTable(db);
@@ -122,6 +121,9 @@ class AppDatabase {
         }
         if (oldVersion < 8) {
           await _migrateDailyQuestions(db);
+        }
+        if (oldVersion < 9) {
+          await _removeSeedTasks(db);
         }
       },
     );
@@ -588,31 +590,22 @@ class AppDatabase {
     }
   }
 
-  Future<void> _insertInitialTasks(Database db) async {
-    final createdAt = DateTime.now().millisecondsSinceEpoch;
-    final createdDate = DateTime.fromMillisecondsSinceEpoch(createdAt);
-    final initialTasks = [
-      {'title': '阅读 Orca 论文', 'note': '继续看 Section 3', 'completed': 0},
-      {'title': '写 RagForge', 'note': '实现文档解析接口', 'completed': 0},
-      {'title': '上课作业', 'note': '完成第二题', 'completed': 1},
-      {'title': '健身', 'note': '胸 + 肩', 'completed': 0},
-      {'title': '整理笔记', 'note': 'SGLang 阅读笔记', 'completed': 0},
-      {'title': '看技术分享', 'note': 'AI Infra 系列', 'completed': 1},
+  Future<void> _removeSeedTasks(Database db) async {
+    const seedTasks = <(String, String)>[
+      ('阅读 Orca 论文', '继续看 Section 3'),
+      ('写 RagForge', '实现文档解析接口'),
+      ('上课作业', '完成第二题'),
+      ('健身', '胸 + 肩'),
+      ('整理笔记', 'SGLang 阅读笔记'),
+      ('看技术分享', 'AI Infra 系列'),
     ];
 
-    for (var index = 0; index < initialTasks.length; index++) {
-      final initialTask = initialTasks[index];
-      await db.insert('task', {
-        ...initialTask,
-        'created_at': createdAt - index,
-        'duration_seconds': index.isEven ? 25 * 60 : 50 * 60,
-        'plan_date':
-            DateTime(createdDate.year, createdDate.month, createdDate.day)
-                .millisecondsSinceEpoch,
-        'sort_order': index,
-        'completed_at':
-            initialTask['completed'] == 1 ? createdAt - index : null,
-      });
+    for (final (title, note) in seedTasks) {
+      await db.delete(
+        'task',
+        where: 'title = ? AND note = ?',
+        whereArgs: [title, note],
+      );
     }
   }
 }

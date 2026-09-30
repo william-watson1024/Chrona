@@ -6,7 +6,7 @@
 
 - 数据库文件：`chrona.db`
 - 数据库类型：SQLite（通过 `sqflite` 使用）
-- 当前应用数据库版本：8
+- 当前应用数据库版本：9
 - 运行时定义：[`lib/database/app_database.dart`](../../lib/database/app_database.dart)
 - SQL 快照：[`schema.sql`](./schema.sql)
 
@@ -59,7 +59,7 @@ daily_question 1 ───────────── 0..1 journal_entry
 ## 文件索引
 
 - [`schema.sql`](./schema.sql)：当前数据库结构的 SQL 快照
-- [`migration-history.md`](./migration-history.md)：数据库版本 1～8 的迁移记录
+- [`migration-history.md`](./migration-history.md)：数据库版本 1～9 的迁移记录
 - [`tables/task.md`](./tables/task.md)：任务表字段字典
 - [`tables/focus_session.md`](./tables/focus_session.md)：专注记录表字段字典
 - [`tables/journal_entry.md`](./tables/journal_entry.md)：日记表字段字典

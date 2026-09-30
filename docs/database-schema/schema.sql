@@ -1,6 +1,6 @@
 -- CHRONA SQLite schema snapshot
 -- Source: lib/database/app_database.dart
--- Current application database version: 8
+-- Current application database version: 9
 
 CREATE TABLE IF NOT EXISTS task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

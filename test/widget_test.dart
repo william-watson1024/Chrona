@@ -15,8 +15,8 @@ TaskProvider createTestTaskProvider() {
   return TaskProvider.inMemory([
     const Task(
       id: 1,
-      title: '阅读 Orca 论文',
-      note: '继续看 Section 3',
+      title: '测试任务',
+      note: '测试备注',
       completed: false,
       createdAt: 1,
     ),
@@ -81,7 +81,7 @@ void main() {
 
     expect(find.byType(MaterialApp), findsOneWidget);
     expect(find.text('C H R O N A'), findsOneWidget);
-    expect(find.text('阅读 Orca 论文'), findsOneWidget);
+    expect(find.text('测试任务'), findsOneWidget);
 
     final addTask = find.text('添加任务');
     await tester.scrollUntilVisible(
@@ -125,7 +125,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('本轮记录'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).last, '补充一条 Mock 记录');
+    await tester.enterText(find.byType(TextField).last, '补充一条测试记录');
     final saveButton = find.text('保存').last;
     await tester.scrollUntilVisible(
       saveButton,
@@ -137,7 +137,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(HistoryScreen), findsOneWidget);
     expect(focusSessionProvider.sessions, hasLength(1));
-    expect(focusSessionProvider.sessions.single.note, '补充一条 Mock 记录');
+    expect(focusSessionProvider.sessions.single.note, '补充一条测试记录');
   });
 
   testWidgets('adding a task refreshes the home list', (tester) async {

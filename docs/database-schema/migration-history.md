@@ -1,12 +1,12 @@
 # 数据库迁移记录
 
-以下记录根据 `lib/database/app_database.dart` 中的 `openDatabase(... version: 8 ...)` 和 `onUpgrade` 逻辑整理。
+以下记录根据 `lib/database/app_database.dart` 中的 `openDatabase(... version: 9 ...)` 和 `onUpgrade` 逻辑整理。
 
 ## 版本变化
 
 | 版本 | 变化 | 数据处理 |
 | --- | --- | --- |
-| 1 | 建立 `task` 基础表 | 新安装时创建任务表，并写入初始任务 |
+| 1 | 建立 `task` 基础表 | 新安装时创建空任务表，不写入示例任务 |
 | 2 | `task.duration_seconds` | 新增字段，默认值 `900` 秒 |
 | 3 | 建立 `focus_session` | 创建专注记录表 |
 | 4 | `task.plan_date` | 新增字段；根据 `created_at` 回填任务日期 |
@@ -14,6 +14,7 @@
 | 6 | 空值修复 | 修复任务和专注记录中关键字段的空值；不改变表结构 |
 | 7 | 建立 `journal_entry` | 创建日记表 |
 | 8 | 建立 `daily_question` | 创建按日期冻结的问题实例，并把已有非空 `journal_entry.question_text` 迁移为 `CUSTOM / legacy` 问题 |
+| 9 | 移除示例任务 | 删除早期版本可能写入的固定示例任务；不影响用户创建的其他任务 |
 
 ## 迁移注意事项
 
