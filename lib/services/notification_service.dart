@@ -17,9 +17,48 @@ class NotificationService {
   // Android channel sound/vibration settings are immutable after creation.
   // Use a new channel id so existing silent installations receive the alert
   // configuration without any native bridge or extra vibration plugin.
-  static const String focusChannelId = 'chrona_focus_alerts_v3';
-  static const String breakChannelId = 'chrona_break_alerts_v2';
+  static const String focusChannelId = 'chrona_focus_alerts_v4';
+  static const String breakChannelId = 'chrona_break_alerts_v4';
+  static const List<String> _legacyChannelIds = <String>[
+    'chrona_focus_alerts_v1',
+    'chrona_focus_alerts_v2',
+    'chrona_focus_alerts_v3',
+    'chrona_break_alerts_v1',
+    'chrona_break_alerts_v2',
+    'chrona_break_alerts_v3',
+  ];
   static const String _stopReminderActionId = 'stop_focus_reminder';
+  // One pulse per second (500 ms on, 500 ms off) for at least ten seconds.
+  // Android's insistent flag keeps the alert active until the notification is
+  // explicitly cancelled.
+  static final Int64List _reminderVibrationPattern = Int64List.fromList(
+    <int>[
+      0,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+    ],
+  );
+  // Android Notification.FLAG_INSISTENT.
+  static final Int32List _insistentNotificationFlag =
+      Int32List.fromList(<int>[4]);
   static const AndroidNotificationSound _systemDefaultSound =
       UriAndroidNotificationSound(
           'content://settings/system/notification_sound');
@@ -59,6 +98,12 @@ class NotificationService {
 
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
+      // Android notification channels are persistent and immutable. Remove
+      // channels from earlier CHRONA builds, including the old v3 collision
+      // where the focus and break channel IDs overlapped after an upgrade.
+      for (final channelId in _legacyChannelIds) {
+        await android?.deleteNotificationChannel(channelId);
+      }
       await android?.createNotificationChannel(
         AndroidNotificationChannel(
           focusChannelId,
@@ -67,7 +112,7 @@ class NotificationService {
           importance: Importance.high,
           playSound: false,
           enableVibration: true,
-          vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
+          vibrationPattern: _reminderVibrationPattern,
         ),
       );
       await android?.createNotificationChannel(
@@ -79,7 +124,7 @@ class NotificationService {
           playSound: true,
           sound: _systemDefaultSound,
           enableVibration: true,
-          vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
+          vibrationPattern: _reminderVibrationPattern,
         ),
       );
 
@@ -93,9 +138,11 @@ class NotificationService {
     }
   }
 
-  /// Requests the Android 13 notification permission through the plugin.
-  /// Exact-alarm access is intentionally not requested: focus reminders use
-  /// the plugin's inexact idle-safe schedule mode instead.
+  /// Requests notification permission and, when needed, exact-alarm access.
+  ///
+  /// Exact alarms are user-facing timer functionality on Android. If the user
+  /// declines the special access, scheduling falls back to an idle-safe
+  /// inexact alarm while the timestamp-based timer state remains authoritative.
   Future<bool> requestPermission() async {
     await initialize();
     if (!_initialized) return false;
@@ -115,6 +162,55 @@ class NotificationService {
       debugPrintStack(stackTrace: stackTrace);
       return false;
     }
+  }
+
+  Future<void> showOngoingTimer({
+    required DateTime endsAt,
+    required String title,
+    required String body,
+    required bool isBreak,
+  }) {
+    return _enqueue(() async {
+      await initialize();
+      if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
+
+      await requestPermission();
+      final channelId = isBreak ? breakChannelId : focusChannelId;
+      final notificationDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          title,
+          channelDescription: 'CHRONA ${isBreak ? '休息' : '专注'}计时',
+          importance: Importance.low,
+          priority: Priority.low,
+          playSound: false,
+          enableVibration: false,
+          silent: true,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          showWhen: true,
+          when: endsAt.millisecondsSinceEpoch,
+          usesChronometer: true,
+          chronometerCountDown: true,
+          category: AndroidNotificationCategory.progress,
+          visibility: NotificationVisibility.public,
+        ),
+        iOS: const DarwinNotificationDetails(presentSound: false),
+      );
+
+      // The end reminder deliberately reuses this id. When Android delivers
+      // the scheduled notification, it replaces the non-dismissible ongoing
+      // countdown with the completion reminder.
+      await _plugin.cancel(focusNotificationId);
+      await _plugin.show(
+        focusNotificationId,
+        title,
+        body,
+        notificationDetails,
+        payload: isBreak ? 'break_running' : 'focus_running',
+      );
+    });
   }
 
   Future<void> scheduleFocusEnd({
@@ -165,10 +261,6 @@ class NotificationService {
       // chance before the first reminder is scheduled.
       await requestPermission();
 
-      // Replacing the same id makes a stale schedule impossible even if a
-      // caller starts a new session after an earlier one has ended.
-      await _plugin.cancel(focusNotificationId);
-
       final durationLabel = plannedDurationSeconds == null
           ? ''
           : _formatDuration(plannedDurationSeconds);
@@ -182,7 +274,10 @@ class NotificationService {
           playSound: playSound,
           sound: sound,
           enableVibration: true,
-          vibrationPattern: Int64List.fromList(<int>[0, 1000, 500, 1000]),
+          vibrationPattern: _reminderVibrationPattern,
+          ongoing: true,
+          autoCancel: false,
+          additionalFlags: _insistentNotificationFlag,
           category: AndroidNotificationCategory.alarm,
           visibility: NotificationVisibility.public,
           actions: const <AndroidNotificationAction>[
@@ -196,20 +291,43 @@ class NotificationService {
         iOS: DarwinNotificationDetails(presentSound: playSound),
       );
 
-      await _plugin.zonedSchedule(
-        focusNotificationId,
-        title,
-        body(durationLabel),
-        tz.TZDateTime.from(endsAt, tz.local),
-        notificationDetails,
-        // Deliberately avoid SCHEDULE_EXACT_ALARM. This keeps CHRONA a normal
-        // notification app; Android may deliver this a little later while in
-        // deep idle, but no special alarm permission is needed.
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: payload,
-      );
+      var scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        var canScheduleExact =
+            await android.canScheduleExactNotifications() ?? false;
+        if (!canScheduleExact) {
+          canScheduleExact =
+              await android.requestExactAlarmsPermission() ?? false;
+        }
+        if (canScheduleExact) {
+          scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+        }
+      }
+
+      Future<void> schedule(AndroidScheduleMode mode) {
+        return _plugin.zonedSchedule(
+          focusNotificationId,
+          title,
+          body(durationLabel),
+          tz.TZDateTime.from(endsAt, tz.local),
+          notificationDetails,
+          androidScheduleMode: mode,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          payload: payload,
+        );
+      }
+
+      try {
+        await schedule(scheduleMode);
+      } catch (_) {
+        // A device can revoke exact-alarm access while the app is running.
+        // Keep the reminder instead of losing it altogether.
+        if (scheduleMode != AndroidScheduleMode.exactAllowWhileIdle) rethrow;
+        await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+      }
     });
   }
 

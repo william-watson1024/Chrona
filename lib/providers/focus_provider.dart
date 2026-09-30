@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
 import '../services/notification_service.dart';
@@ -36,20 +38,113 @@ class FocusSessionResult {
 }
 
 class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
+  static const _activeSessionKey = 'chrona_active_focus_session_v1';
+  static Future<void> _persistenceQueue = Future<void>.value();
+  static int _persistenceRevision = 0;
+
   FocusProvider({
     required this.task,
     this.plannedDurationSeconds = FocusTimerDurations.pomodoro,
     this.mode = FocusMode.focus,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
+        _persistenceEnabled = now == null,
         remainingSeconds = plannedDurationSeconds {
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Restores the one active focus/break session, if one was persisted.
+  ///
+  /// The task snapshot is kept with the timer so the session can be restored
+  /// even when the task list has not finished loading yet or the task was
+  /// edited while the app process was gone.
+  static Future<FocusProvider?> restore({Task? task}) async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_activeSessionKey);
+    if (encoded == null || encoded.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) throw const FormatException('Invalid timer state');
+      final snapshot = Map<String, dynamic>.from(decoded);
+      final taskMap = snapshot['task'];
+      if (taskMap is! Map) throw const FormatException('Missing timer task');
+
+      final storedTask = Task.fromMap(Map<String, Object?>.from(taskMap));
+      final restoredTask = task ?? storedTask;
+      final plannedDuration = _readPersistedInt(
+        snapshot['planned_duration_seconds'],
+      );
+      final startedAt = _readPersistedDateTime(snapshot['started_at']);
+      final status = snapshot['status'];
+      final mode = snapshot['mode'];
+      if (plannedDuration == null ||
+          plannedDuration <= 0 ||
+          startedAt == null) {
+        throw const FormatException('Invalid timer timestamps');
+      }
+      if (status != 'running' && status != 'paused') {
+        throw const FormatException('Invalid timer status');
+      }
+      if (mode != 'focus' && mode != 'rest') {
+        throw const FormatException('Invalid timer mode');
+      }
+
+      final provider = FocusProvider(
+        task: restoredTask,
+        plannedDurationSeconds: plannedDuration,
+        mode: mode == 'rest' ? FocusMode.rest : FocusMode.focus,
+      );
+      provider.startedAt = startedAt;
+      provider.endsAt = _readPersistedDateTime(snapshot['ends_at']);
+      provider.pausedAt = _readPersistedDateTime(snapshot['paused_at']);
+      provider.pausedRemainingSeconds = _readPersistedInt(
+        snapshot['paused_remaining_seconds'],
+      );
+      provider.isCountUp = snapshot['is_count_up'] == true;
+      provider.status = status == 'paused'
+          ? FocusTimerStatus.paused
+          : FocusTimerStatus.running;
+
+      if (provider.isRunning) {
+        if (provider.endsAt == null) {
+          throw const FormatException('Running timer has no end time');
+        }
+        provider._refreshFromClock(notify: false);
+        if (provider.isRunning) {
+          provider._startTicker();
+          provider._scheduleNotification();
+        }
+      } else {
+        final pausedRemaining = provider.pausedRemainingSeconds;
+        if (pausedRemaining == null || pausedRemaining < 0) {
+          throw const FormatException('Paused timer has no remaining time');
+        }
+        provider.remainingSeconds = pausedRemaining;
+      }
+
+      return provider;
+    } catch (_) {
+      await clearPersistedState();
+      return null;
+    }
+  }
+
+  static Future<void> clearPersistedState() async {
+    final revision = ++_persistenceRevision;
+    _persistenceQueue = _persistenceQueue.then((_) async {
+      final preferences = await SharedPreferences.getInstance();
+      if (revision != _persistenceRevision) return;
+      await preferences.remove(_activeSessionKey);
+    }).catchError((_) {});
+    await _persistenceQueue;
   }
 
   final Task task;
   final int plannedDurationSeconds;
   final FocusMode mode;
   final DateTime Function() _now;
+  final bool _persistenceEnabled;
 
   DateTime? startedAt;
   DateTime? endsAt;
@@ -111,6 +206,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     status = FocusTimerStatus.running;
     _refreshFromClock();
     _startTicker();
+    _persistActiveState();
     _scheduleNotification();
     notifyListeners();
   }
@@ -125,6 +221,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ticker = null;
     endsAt = null;
     status = FocusTimerStatus.paused;
+    _persistActiveState();
     unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
@@ -137,6 +234,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     pausedRemainingSeconds = null;
     status = FocusTimerStatus.running;
     _startTicker();
+    _persistActiveState();
     _scheduleNotification();
     notifyListeners();
   }
@@ -147,10 +245,15 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     if (status == FocusTimerStatus.running) _refreshFromClock();
+    if (status != FocusTimerStatus.running &&
+        status != FocusTimerStatus.paused) {
+      return;
+    }
     endedAt = _now();
     status = FocusTimerStatus.cancelled;
     _ticker?.cancel();
     _ticker = null;
+    _clearPersistedState();
     unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
@@ -171,6 +274,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     status = FocusTimerStatus.finished;
     _ticker?.cancel();
     _ticker = null;
+    _clearPersistedState();
     unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
@@ -187,26 +291,36 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
-  void _refreshFromClock() {
+  void _refreshFromClock({bool notify = true}) {
     if (status != FocusTimerStatus.running || endsAt == null) return;
-    final millisecondsRemaining = endsAt!.difference(_now()).inMilliseconds;
+    final end = endsAt!;
+    final millisecondsRemaining = end.difference(_now()).inMilliseconds;
     if (millisecondsRemaining <= 0) {
       remainingSeconds = 0;
-      endedAt = _now();
+      // A late UI tick must never turn a 25-minute session into a 28-minute
+      // session. The scheduled end timestamp is the canonical completion time.
+      endedAt = end;
       status = FocusTimerStatus.finished;
       _ticker?.cancel();
       _ticker = null;
-      notifyListeners();
+      _clearPersistedState();
+      if (notify) notifyListeners();
       return;
     }
 
     remainingSeconds = (millisecondsRemaining / 1000).ceil();
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   void _scheduleNotification() {
     final end = endsAt;
     if (end == null) return;
+    unawaited(NotificationService.instance.showOngoingTimer(
+      endsAt: end,
+      title: isBreak ? '拾年 · 休息中' : '拾年 · 专注中',
+      body: isBreak ? '短休息' : task.title,
+      isBreak: isBreak,
+    ));
     if (isBreak) {
       unawaited(NotificationService.instance.scheduleBreakEnd(endsAt: end));
       return;
@@ -220,13 +334,63 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    final shouldCancelNotification =
-        status == FocusTimerStatus.running || status == FocusTimerStatus.paused;
     _ticker?.cancel();
-    if (shouldCancelNotification) {
-      unawaited(NotificationService.instance.cancelFocusEnd());
-    }
+    // Provider/UI disposal must not cancel a user-started timer. The timer is
+    // persisted independently and the Android notification owns its schedule.
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  void _persistActiveState() {
+    if (!_persistenceEnabled ||
+        (status != FocusTimerStatus.running &&
+            status != FocusTimerStatus.paused) ||
+        startedAt == null) {
+      return;
+    }
+
+    final snapshot = <String, dynamic>{
+      'version': 1,
+      'status': status.name,
+      'mode': mode.name,
+      'planned_duration_seconds': plannedDurationSeconds,
+      'started_at': startedAt!.millisecondsSinceEpoch,
+      'ends_at': endsAt?.millisecondsSinceEpoch,
+      'paused_at': pausedAt?.millisecondsSinceEpoch,
+      'paused_remaining_seconds': pausedRemainingSeconds,
+      'is_count_up': isCountUp,
+      'task': task.toMap(),
+    };
+    final encoded = jsonEncode(snapshot);
+    final revision = ++_persistenceRevision;
+    _persistenceQueue = _persistenceQueue.then((_) async {
+      final preferences = await SharedPreferences.getInstance();
+      if (revision != _persistenceRevision) return;
+      await preferences.setString(_activeSessionKey, encoded);
+    }).catchError((_) {});
+  }
+
+  void _clearPersistedState() {
+    if (!_persistenceEnabled) return;
+    final revision = ++_persistenceRevision;
+    _persistenceQueue = _persistenceQueue.then((_) async {
+      final preferences = await SharedPreferences.getInstance();
+      if (revision != _persistenceRevision) return;
+      await preferences.remove(_activeSessionKey);
+    }).catchError((_) {});
+  }
+}
+
+int? _readPersistedInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+DateTime? _readPersistedDateTime(Object? value) {
+  final milliseconds = _readPersistedInt(value);
+  return milliseconds == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(milliseconds);
 }

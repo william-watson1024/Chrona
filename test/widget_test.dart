@@ -195,6 +195,34 @@ void main() {
     expect(find.text('测试任务'), findsOneWidget);
   });
 
+  test('delayed lifecycle refresh finishes at the original end timestamp', () {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    final provider = FocusProvider(
+      task: const Task(
+        id: 1,
+        title: '测试任务',
+        completed: false,
+        createdAt: 1,
+      ),
+      plannedDurationSeconds: 25 * 60,
+      now: () => currentTime,
+    );
+
+    provider.start();
+    currentTime = currentTime.add(const Duration(minutes: 28, seconds: 13));
+    provider.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+    expect(provider.status, FocusTimerStatus.finished);
+    expect(provider.remainingSeconds, 0);
+    expect(
+      provider.endedAt,
+      DateTime(2026, 9, 27, 20, 25),
+    );
+    expect(provider.actualDurationSeconds, 25 * 60);
+
+    provider.dispose();
+  });
+
   testWidgets('completed focus saves and enters break mode', (tester) async {
     var currentTime = DateTime(2026, 9, 27, 20, 0);
     final focusProvider = FocusProvider(

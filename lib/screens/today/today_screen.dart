@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -57,6 +59,8 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
   DateTime _selectedDate = startOfLocalDay(DateTime.now());
   DateTime _lastObservedToday = startOfLocalDay(DateTime.now());
   FocusProvider? _activeFocusProvider;
+  bool _restoreAttempted = false;
+  bool _isOpeningDatePicker = false;
 
   @override
   void initState() {
@@ -64,6 +68,9 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     WidgetsBinding.instance.addObserver(this);
     _pageController = PageController(initialPage: _pageAnchor);
     _diaryPageController = PageController(initialPage: _pageAnchor);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_restoreActiveFocus());
+    });
   }
 
   @override
@@ -127,16 +134,58 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
   }
 
   Future<void> _openDatePicker() async {
-    final picked = await showDialog<DateTime>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _CompactDatePickerDialog(initialDate: _selectedDate),
-    );
-    if (picked != null && mounted) _selectDate(picked);
+    if (_isOpeningDatePicker) return;
+    _isOpeningDatePicker = true;
+    try {
+      final picked = await showDialog<DateTime>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _CompactDatePickerDialog(initialDate: _selectedDate),
+      );
+      if (picked != null && mounted) _selectDate(picked);
+    } finally {
+      _isOpeningDatePicker = false;
+    }
+  }
+
+  Future<void> _restoreActiveFocus() async {
+    if (_restoreAttempted) return;
+    _restoreAttempted = true;
+
+    // The timer snapshot includes a task fallback, so restoring does not
+    // depend on the task list finishing first. Loading here still lets the
+    // normal home screen settle before the restored session is presented.
+    await context.read<TaskProvider>().loadTasks();
+    if (!mounted) return;
+
+    final restored = await FocusProvider.restore();
+    if (!mounted || restored == null) return;
+
+    _activeFocusProvider = restored;
+    restored.addListener(_handleActiveFocusChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _activeFocusProvider != restored) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FocusScreen(
+            task: restored.task,
+            durationSeconds: restored.plannedDurationSeconds,
+            mode: restored.mode,
+            focusProvider: restored,
+          ),
+        ),
+      );
+    });
   }
 
   void _openFocus(Task task) {
     final activeProvider = _activeFocusProvider;
+    if (activeProvider != null &&
+        activeProvider.task.id != task.id &&
+        (activeProvider.isRunning || activeProvider.isPaused)) {
+      return;
+    }
     final canResume = activeProvider != null &&
         activeProvider.task.id == task.id &&
         (activeProvider.isRunning || activeProvider.isPaused);
@@ -1025,7 +1074,6 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
   static final DateTime _firstDate = DateTime(2000);
   static final DateTime _lastDate = DateTime(2100, 12, 31);
 
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late DateTime _selectedDate;
   bool _inputMode = false;
 
@@ -1047,11 +1095,12 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
     Navigator.of(context).pop(_sameDayLastYear(_selectedDate));
   }
 
-  void _confirm() {
-    if (_inputMode && !(_formKey.currentState?.validate() ?? false)) {
+  void _confirm(BuildContext formContext) {
+    final form = Form.of(formContext);
+    if (_inputMode && !form.validate()) {
       return;
     }
-    _formKey.currentState?.save();
+    form.save();
     Navigator.of(context).pop(_selectedDate);
   }
 
@@ -1075,92 +1124,93 @@ class _CompactDatePickerDialogState extends State<_CompactDatePickerDialog> {
           ),
         ),
       ),
-      child: Dialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(4)),
-        ),
-        child: SizedBox(
-          width: 360,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          formatFocusDate(_selectedDate),
-                          style: const TextStyle(
-                            color: Color(0xFF111111),
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
+      child: Form(
+        child: Builder(
+          builder: (formContext) => Dialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(4)),
+            ),
+            child: SizedBox(
+              width: 360,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              formatFocusDate(_selectedDate),
+                              style: const TextStyle(
+                                color: Color(0xFF111111),
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
-                        ),
+                          IconButton(
+                            tooltip: _inputMode ? '日历' : '输入日期',
+                            onPressed: () => setState(
+                              () => _inputMode = !_inputMode,
+                            ),
+                            icon: Icon(
+                              _inputMode
+                                  ? Icons.calendar_today_outlined
+                                  : Icons.edit_outlined,
+                              color: const Color(0xFF111111),
+                            ),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        tooltip: _inputMode ? '日历' : '输入日期',
-                        onPressed: () => setState(
-                          () => _inputMode = !_inputMode,
+                    ),
+                    if (_inputMode)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                        child: InputDatePickerFormField(
+                          initialDate: _selectedDate,
+                          firstDate: _firstDate,
+                          lastDate: _lastDate,
+                          autofocus: true,
+                          onDateSubmitted: _selectInputDate,
+                          onDateSaved: _selectInputDate,
                         ),
-                        icon: Icon(
-                          _inputMode
-                              ? Icons.calendar_today_outlined
-                              : Icons.edit_outlined,
-                          color: const Color(0xFF111111),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_inputMode)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-                    child: Form(
-                      key: _formKey,
-                      child: InputDatePickerFormField(
+                      )
+                    else
+                      CalendarDatePicker(
                         initialDate: _selectedDate,
                         firstDate: _firstDate,
                         lastDate: _lastDate,
-                        autofocus: true,
-                        onDateSubmitted: _selectInputDate,
-                        onDateSaved: _selectInputDate,
+                        currentDate: DateTime.now(),
+                        onDateChanged: _selectInputDate,
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: _returnToLastYear,
+                            child: const Text('\u53bb\u5e74\u4eca\u65e5'),
+                          ),
+                          TextButton(
+                            onPressed: _returnToToday,
+                            child: const Text('回到今朝'),
+                          ),
+                          TextButton(
+                            onPressed: () => _confirm(formContext),
+                            child: const Text('转赴其时'),
+                          ),
+                        ],
                       ),
                     ),
-                  )
-                else
-                  CalendarDatePicker(
-                    initialDate: _selectedDate,
-                    firstDate: _firstDate,
-                    lastDate: _lastDate,
-                    currentDate: DateTime.now(),
-                    onDateChanged: _selectInputDate,
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: _returnToLastYear,
-                        child: const Text('\u53bb\u5e74\u4eca\u65e5'),
-                      ),
-                      TextButton(
-                        onPressed: _returnToToday,
-                        child: const Text('回到今朝'),
-                      ),
-                      TextButton(
-                        onPressed: _confirm,
-                        child: const Text('转赴其时'),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
