@@ -281,7 +281,14 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshFromClock();
+    if (state != AppLifecycleState.resumed) return;
+    _refreshFromClock();
+    if (isRunning) {
+      // Exact-alarm access may have been granted from Android's settings
+      // screen after the first schedule fell back to an inexact alarm.
+      // Replacing the schedule on resume applies the newly granted access.
+      _scheduleNotification(requestExactAlarmPermission: false);
+    }
   }
 
   void _startTicker() {
@@ -312,7 +319,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (notify) notifyListeners();
   }
 
-  void _scheduleNotification() {
+  void _scheduleNotification({bool requestExactAlarmPermission = true}) {
     final end = endsAt;
     if (end == null) return;
     unawaited(NotificationService.instance.showOngoingTimer(
@@ -322,13 +329,17 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       isBreak: isBreak,
     ));
     if (isBreak) {
-      unawaited(NotificationService.instance.scheduleBreakEnd(endsAt: end));
+      unawaited(NotificationService.instance.scheduleBreakEnd(
+        endsAt: end,
+        requestExactAlarmPermission: requestExactAlarmPermission,
+      ));
       return;
     }
     unawaited(NotificationService.instance.scheduleFocusEnd(
       endsAt: end,
       taskTitle: task.title,
       plannedDurationSeconds: plannedDurationSeconds,
+      requestExactAlarmPermission: requestExactAlarmPermission,
     ));
   }
 

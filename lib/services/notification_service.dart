@@ -217,6 +217,7 @@ class NotificationService {
     required DateTime endsAt,
     required String taskTitle,
     required int plannedDurationSeconds,
+    bool requestExactAlarmPermission = true,
   }) {
     return _scheduleEnd(
       channelId: focusChannelId,
@@ -226,10 +227,14 @@ class NotificationService {
       plannedDurationSeconds: plannedDurationSeconds,
       playSound: false,
       payload: 'focus_finished',
+      requestExactAlarmPermission: requestExactAlarmPermission,
     );
   }
 
-  Future<void> scheduleBreakEnd({required DateTime endsAt}) {
+  Future<void> scheduleBreakEnd({
+    required DateTime endsAt,
+    bool requestExactAlarmPermission = true,
+  }) {
     return _scheduleEnd(
       channelId: breakChannelId,
       title: '休息结束',
@@ -239,6 +244,7 @@ class NotificationService {
       playSound: true,
       sound: _systemDefaultSound,
       payload: 'break_finished',
+      requestExactAlarmPermission: requestExactAlarmPermission,
     );
   }
 
@@ -251,6 +257,7 @@ class NotificationService {
     required bool playSound,
     AndroidNotificationSound? sound,
     required String payload,
+    required bool requestExactAlarmPermission,
   }) {
     return _enqueue(() async {
       await initialize();
@@ -297,7 +304,7 @@ class NotificationService {
       if (android != null) {
         var canScheduleExact =
             await android.canScheduleExactNotifications() ?? false;
-        if (!canScheduleExact) {
+        if (!canScheduleExact && requestExactAlarmPermission) {
           canScheduleExact =
               await android.requestExactAlarmsPermission() ?? false;
         }
