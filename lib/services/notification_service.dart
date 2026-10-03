@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+
+import '../providers/focus_settings_provider.dart';
 
 /// Owns the local-notification channels used by focus and break sessions.
 ///
@@ -14,14 +17,12 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const int focusNotificationId = 1001;
-  // Android channel sound/vibration settings are immutable after creation.
-  // Use a new channel id so existing silent installations receive the alert
-  // configuration without any native bridge or extra vibration plugin.
-  static const String focusChannelId = 'chrona_focus_alerts_v4';
-  // Android persists channel settings and ignores later sound/vibration
-  // changes for an existing ID. Recreate the break channel so devices that
-  // received an earlier break-channel configuration get the current alert.
-  static const String breakChannelId = 'chrona_break_alerts_v5';
+  static const String _focusProgressChannelId = 'chrona_focus_progress_v1';
+  static const String _breakProgressChannelId = 'chrona_break_progress_v1';
+  static const String _ringChannelId = 'chrona_reminder_ring_v1';
+  static const String _vibrateChannelId = 'chrona_reminder_vibrate_v1';
+  static const String _ringAndVibrateChannelId =
+      'chrona_reminder_ring_vibrate_v1';
   static const List<String> _legacyChannelIds = <String>[
     'chrona_focus_alerts_v1',
     'chrona_focus_alerts_v2',
@@ -30,6 +31,8 @@ class NotificationService {
     'chrona_break_alerts_v2',
     'chrona_break_alerts_v3',
     'chrona_break_alerts_v4',
+    'chrona_break_alerts_v5',
+    'chrona_focus_alerts_v4',
   ];
   static const String _stopReminderActionId = 'stop_focus_reminder';
   // One pulse per second (500 ms on, 500 ms off) for at least ten seconds.
@@ -109,27 +112,45 @@ class NotificationService {
         await android?.deleteNotificationChannel(channelId);
       }
       await android?.createNotificationChannel(
-        AndroidNotificationChannel(
-          focusChannelId,
-          '专注完成提醒',
-          description: 'CHRONA 番茄钟完成提醒',
-          importance: Importance.high,
+        const AndroidNotificationChannel(
+          _focusProgressChannelId,
+          '专注计时',
+          description: 'CHRONA 专注倒计时',
+          importance: Importance.low,
           playSound: false,
-          enableVibration: true,
-          vibrationPattern: _reminderVibrationPattern,
+          enableVibration: false,
         ),
       );
       await android?.createNotificationChannel(
-        AndroidNotificationChannel(
-          breakChannelId,
-          '休息结束提醒',
-          description: 'CHRONA 休息结束提醒',
-          importance: Importance.high,
-          playSound: true,
-          sound: _systemDefaultSound,
-          enableVibration: true,
-          vibrationPattern: _reminderVibrationPattern,
+        const AndroidNotificationChannel(
+          _breakProgressChannelId,
+          '休息计时',
+          description: 'CHRONA 休息倒计时',
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
         ),
+      );
+      await _createReminderChannel(
+        android,
+        _ringChannelId,
+        '计时结束提醒：响铃',
+        playSound: true,
+        enableVibration: false,
+      );
+      await _createReminderChannel(
+        android,
+        _vibrateChannelId,
+        '计时结束提醒：震动',
+        playSound: false,
+        enableVibration: true,
+      );
+      await _createReminderChannel(
+        android,
+        _ringAndVibrateChannelId,
+        '计时结束提醒：响铃并震动',
+        playSound: true,
+        enableVibration: true,
       );
 
       _initialized = true;
@@ -140,6 +161,29 @@ class NotificationService {
       debugPrint('CHRONA notification initialization failed: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
+  }
+
+  Future<void> _createReminderChannel(
+    AndroidFlutterLocalNotificationsPlugin? android,
+    String channelId,
+    String name, {
+    required bool playSound,
+    required bool enableVibration,
+  }) {
+    return android?.createNotificationChannel(
+          AndroidNotificationChannel(
+            channelId,
+            name,
+            description: 'CHRONA 专注和休息结束提醒',
+            importance: Importance.high,
+            playSound: playSound,
+            sound: playSound ? _systemDefaultSound : null,
+            enableVibration: enableVibration,
+            vibrationPattern:
+                enableVibration ? _reminderVibrationPattern : null,
+          ),
+        ) ??
+        Future<void>.value();
   }
 
   /// Requests notification permission and, when needed, exact-alarm access.
@@ -179,7 +223,8 @@ class NotificationService {
       if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
 
       await requestPermission();
-      final channelId = isBreak ? breakChannelId : focusChannelId;
+      final channelId =
+          isBreak ? _breakProgressChannelId : _focusProgressChannelId;
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,
@@ -224,12 +269,10 @@ class NotificationService {
     bool requestExactAlarmPermission = true,
   }) {
     return _scheduleEnd(
-      channelId: focusChannelId,
       title: '专注完成',
       body: (durationLabel) => '$taskTitle\n本轮 $durationLabel 已结束',
       endsAt: endsAt,
       plannedDurationSeconds: plannedDurationSeconds,
-      playSound: false,
       payload: 'focus_finished',
       requestExactAlarmPermission: requestExactAlarmPermission,
     );
@@ -240,26 +283,20 @@ class NotificationService {
     bool requestExactAlarmPermission = true,
   }) {
     return _scheduleEnd(
-      channelId: breakChannelId,
       title: '休息结束',
       body: (_) => '准备开始下一轮专注',
       endsAt: endsAt,
       plannedDurationSeconds: null,
-      playSound: true,
-      sound: _systemDefaultSound,
       payload: 'break_finished',
       requestExactAlarmPermission: requestExactAlarmPermission,
     );
   }
 
   Future<void> _scheduleEnd({
-    required String channelId,
     required String title,
     required String Function(String durationLabel) body,
     required DateTime endsAt,
     required int? plannedDurationSeconds,
-    required bool playSound,
-    AndroidNotificationSound? sound,
     required String payload,
     required bool requestExactAlarmPermission,
   }) {
@@ -272,6 +309,22 @@ class NotificationService {
       // chance before the first reminder is scheduled.
       await requestPermission();
 
+      final preferences = await SharedPreferences.getInstance();
+      final configuredMode = preferences.getString(
+        FocusSettingsProvider.reminderModeKey,
+      );
+      final reminderMode = ReminderMode.values.firstWhere(
+        (mode) => mode.name == configuredMode,
+        orElse: () => FocusSettingsProvider.defaultReminderMode,
+      );
+      final channelId = switch (reminderMode) {
+        ReminderMode.ring => _ringChannelId,
+        ReminderMode.vibrate => _vibrateChannelId,
+        ReminderMode.ringAndVibrate => _ringAndVibrateChannelId,
+      };
+      final playSound = reminderMode != ReminderMode.vibrate;
+      final enableVibration = reminderMode != ReminderMode.ring;
+
       final durationLabel = plannedDurationSeconds == null
           ? ''
           : _formatDuration(plannedDurationSeconds);
@@ -283,9 +336,10 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           playSound: playSound,
-          sound: sound,
-          enableVibration: true,
-          vibrationPattern: _reminderVibrationPattern,
+          sound: playSound ? _systemDefaultSound : null,
+          enableVibration: enableVibration,
+          vibrationPattern:
+              enableVibration ? _reminderVibrationPattern : null,
           ongoing: true,
           autoCancel: false,
           additionalFlags: _insistentNotificationFlag,

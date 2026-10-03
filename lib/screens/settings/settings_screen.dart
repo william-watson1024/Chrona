@@ -100,6 +100,11 @@ class _SettingsContentState extends State<_SettingsContent> {
                         options: _breakOptions,
                         onChanged: settings.updateBreakDuration,
                       ),
+                      const SizedBox(height: 24),
+                      _ReminderModeSetting(
+                        value: settings.reminderMode,
+                        onChanged: settings.updateReminderMode,
+                      ),
                       const SizedBox(height: 44),
                       _BirthdaySetting(
                         birthday: _birthday,
@@ -223,6 +228,16 @@ class _SettingsContentState extends State<_SettingsContent> {
         final duration =
             (importedSettings['break_duration_seconds'] as num).toInt();
         if (duration > 0) await settings.updateBreakDuration(duration);
+      }
+      if (importedSettings is Map &&
+          importedSettings['reminder_mode'] is String) {
+        final modeName = importedSettings['reminder_mode'] as String;
+        for (final mode in ReminderMode.values) {
+          if (mode.name == modeName) {
+            await settings.updateReminderMode(mode);
+            break;
+          }
+        }
       }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -387,6 +402,65 @@ class _DurationSetting extends StatelessWidget {
   String _formatDuration(int seconds) {
     if (seconds < 60) return '$seconds \u79d2';
     return '${seconds ~/ 60} \u5206\u949f';
+  }
+}
+
+class _ReminderModeSetting extends StatelessWidget {
+  const _ReminderModeSetting({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final ReminderMode value;
+  final ValueChanged<ReminderMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '\u63d0\u9192\u65b9\u5f0f',
+                style: TextStyle(
+                  color: Color(0xFF111111),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '\u9002\u7528\u4e8e\u4e13\u6ce8\u548c\u4f11\u606f\u7ed3\u675f\u63d0\u9192',
+                style: TextStyle(color: Color(0xFF858585), fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        DropdownButton<ReminderMode>(
+          value: value,
+          underline: const SizedBox.shrink(),
+          items: const [
+            DropdownMenuItem(
+              value: ReminderMode.ring,
+              child: Text('\u54cd\u94c3'),
+            ),
+            DropdownMenuItem(
+              value: ReminderMode.vibrate,
+              child: Text('\u9707\u52a8'),
+            ),
+            DropdownMenuItem(
+              value: ReminderMode.ringAndVibrate,
+              child: Text('\u54cd\u94c3\u5e76\u9707\u52a8'),
+            ),
+          ],
+          onChanged: (newValue) {
+            if (newValue != null) onChanged(newValue);
+          },
+        ),
+      ],
+    );
   }
 }
 

@@ -17,11 +17,16 @@ class DataTransferService {
     final payload = await _database.exportData();
     final preferences = await SharedPreferences.getInstance();
     final breakDuration = preferences.getInt('break_duration_seconds');
+    final reminderMode = preferences.getString('reminder_mode');
     final birthdayMonth = preferences.getInt(BirthdaySettings.birthdayMonthKey);
     final birthdayDay = preferences.getInt(BirthdaySettings.birthdayDayKey);
-    if (breakDuration != null || birthdayMonth != null || birthdayDay != null) {
+    if (breakDuration != null ||
+        reminderMode != null ||
+        birthdayMonth != null ||
+        birthdayDay != null) {
       payload['settings'] = {
         if (breakDuration != null) 'break_duration_seconds': breakDuration,
+        if (reminderMode != null) 'reminder_mode': reminderMode,
         if (birthdayMonth != null) 'birthday_month': birthdayMonth,
         if (birthdayDay != null) 'birthday_day': birthdayDay,
       };
@@ -80,6 +85,13 @@ class DataTransferService {
           'break_duration_seconds',
           breakDuration.toInt(),
         );
+      }
+      final reminderMode = settings['reminder_mode'];
+      if (reminderMode is String &&
+          const <String>{'ring', 'vibrate', 'ringAndVibrate'}
+              .contains(reminderMode)) {
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString('reminder_mode', reminderMode);
       }
       final birthdayMonth = settings['birthday_month'];
       final birthdayDay = settings['birthday_day'];
