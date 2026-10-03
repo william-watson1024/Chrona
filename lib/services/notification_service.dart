@@ -18,7 +18,10 @@ class NotificationService {
   // Use a new channel id so existing silent installations receive the alert
   // configuration without any native bridge or extra vibration plugin.
   static const String focusChannelId = 'chrona_focus_alerts_v4';
-  static const String breakChannelId = 'chrona_break_alerts_v4';
+  // Android persists channel settings and ignores later sound/vibration
+  // changes for an existing ID. Recreate the break channel so devices that
+  // received an earlier break-channel configuration get the current alert.
+  static const String breakChannelId = 'chrona_break_alerts_v5';
   static const List<String> _legacyChannelIds = <String>[
     'chrona_focus_alerts_v1',
     'chrona_focus_alerts_v2',
@@ -26,6 +29,7 @@ class NotificationService {
     'chrona_break_alerts_v1',
     'chrona_break_alerts_v2',
     'chrona_break_alerts_v3',
+    'chrona_break_alerts_v4',
   ];
   static const String _stopReminderActionId = 'stop_focus_reminder';
   // One pulse per second (500 ms on, 500 ms off) for at least ten seconds.
