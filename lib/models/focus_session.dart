@@ -103,6 +103,24 @@ class FocusSession {
       createdAt: createdAt,
     );
   }
+
+  FocusSession copyWithTitleAndNote({
+    required String title,
+    required String? note,
+  }) {
+    return FocusSession(
+      id: id,
+      taskId: taskId,
+      taskTitleSnapshot: title,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      plannedDurationSeconds: plannedDurationSeconds,
+      actualDurationSeconds: actualDurationSeconds,
+      note: note,
+      status: status,
+      createdAt: createdAt,
+    );
+  }
 }
 
 int? _readInt(Object? value) {

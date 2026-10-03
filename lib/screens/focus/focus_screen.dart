@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/focus_session.dart';
 import '../../models/task.dart';
 import '../../providers/focus_provider.dart';
+import '../../providers/focus_session_provider.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
@@ -76,15 +80,46 @@ class _FocusScreenState extends State<FocusScreen> {
 
     _hasOpenedNote = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => FocusNoteScreen(
-            session: _focusProvider.sessionResult,
-          ),
-        ),
-      );
+      if (mounted) unawaited(_openFocusNote());
     });
+  }
+
+  Future<void> _openFocusNote() async {
+    final sessionResult = _focusProvider.sessionResult;
+    FocusSession? savedSession;
+    if (sessionResult.status == FocusTimerStatus.finished) {
+      final sessionProvider =
+          Provider.of<FocusSessionProvider?>(context, listen: false);
+      if (sessionProvider != null) {
+        try {
+          savedSession = await sessionProvider.saveSessionIfAbsent(
+            FocusSession(
+              taskId: sessionResult.task.id,
+              taskTitleSnapshot: sessionResult.task.title,
+              startedAt: sessionResult.startedAt,
+              endedAt: sessionResult.endedAt,
+              plannedDurationSeconds: sessionResult.plannedDurationSeconds,
+              actualDurationSeconds: sessionResult.actualDurationSeconds,
+              note: null,
+              status: FocusSessionStatus.completed,
+              createdAt: sessionResult.endedAt,
+            ),
+          );
+        } catch (_) {
+          // Keep the note page available so the user can retry saving there.
+        }
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FocusNoteScreen(
+          session: sessionResult,
+          savedSession: savedSession,
+        ),
+      ),
+    );
   }
 
   void _startNextFocus() {

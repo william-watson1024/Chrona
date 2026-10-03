@@ -13,9 +13,14 @@ import '../history/history_screen.dart';
 import 'focus_screen.dart';
 
 class FocusNoteScreen extends StatefulWidget {
-  const FocusNoteScreen({super.key, required this.session});
+  const FocusNoteScreen({
+    super.key,
+    required this.session,
+    this.savedSession,
+  });
 
   final FocusSessionResult session;
+  final FocusSession? savedSession;
 
   @override
   State<FocusNoteScreen> createState() => _FocusNoteScreenState();
@@ -83,7 +88,15 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
     );
 
     try {
-      final saved = await _sessionProvider.saveSession(session);
+      final saved = widget.savedSession != null
+          ? await _sessionProvider.updateSessionDetails(
+              widget.savedSession!,
+              taskTitleSnapshot: taskTitle,
+              note: session.note,
+            )
+          : widget.session.status == FocusTimerStatus.finished
+              ? await _sessionProvider.saveSessionIfAbsent(session)
+              : await _sessionProvider.saveSession(session);
       if (!mounted) return;
       if (saved == null) {
         setState(() {

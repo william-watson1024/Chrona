@@ -93,6 +93,17 @@ class FocusSessionProvider extends ChangeNotifier {
     }
   }
 
+  Future<FocusSession?> saveSessionIfAbsent(FocusSession session) async {
+    await loadSessions();
+    final existing = _sessions.where((item) =>
+        item.taskId == session.taskId &&
+        item.startedAt.isAtSameMomentAs(session.startedAt) &&
+        item.endedAt.isAtSameMomentAs(session.endedAt) &&
+        item.status == session.status);
+    if (existing.isNotEmpty) return existing.first;
+    return saveSession(session);
+  }
+
   Future<FocusSession?> updateSessionNote(
     FocusSession session,
     String? note,
@@ -106,6 +117,35 @@ class FocusSessionProvider extends ChangeNotifier {
     );
     if (!_isInMemory) {
       await _database.updateFocusSessionNote(id, updated.note);
+    }
+
+    final index = _sessions.indexWhere((item) => item.id == id);
+    if (index >= 0) _sessions[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  Future<FocusSession?> updateSessionDetails(
+    FocusSession session, {
+    required String taskTitleSnapshot,
+    required String? note,
+  }) async {
+    final id = session.id;
+    if (id == null) return null;
+
+    final normalizedNote = note?.trim();
+    final updated = session.copyWithTitleAndNote(
+      title: taskTitleSnapshot,
+      note: normalizedNote == null || normalizedNote.isEmpty
+          ? null
+          : normalizedNote,
+    );
+    if (!_isInMemory) {
+      await _database.updateFocusSessionDetails(
+        id,
+        taskTitleSnapshot: updated.taskTitleSnapshot,
+        note: updated.note,
+      );
     }
 
     final index = _sessions.indexWhere((item) => item.id == id);

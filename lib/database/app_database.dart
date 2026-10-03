@@ -294,6 +294,23 @@ class AppDatabase {
     );
   }
 
+  Future<void> updateFocusSessionDetails(
+    int id, {
+    required String taskTitleSnapshot,
+    required String? note,
+  }) async {
+    final db = await database;
+    await db.update(
+      'focus_session',
+      {
+        'task_title_snapshot': taskTitleSnapshot,
+        'note': note,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<JournalEntry?> getJournalByDate(DateTime date) async {
     final db = await database;
     await _createJournalEntryTable(db);
