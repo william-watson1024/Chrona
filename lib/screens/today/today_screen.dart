@@ -62,6 +62,8 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
   FocusProvider? _activeFocusProvider;
   bool _restoreAttempted = false;
   bool _isOpeningDatePicker = false;
+  int? _pendingSyncedPage;
+  bool? _pendingSyncedPageIsDiary;
 
   @override
   void initState() {
@@ -119,13 +121,34 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     });
   }
 
-  void _handlePageChanged(int page) {
+  void _handlePageChanged(int page, bool fromDiary) {
     final date = _dateForPage(page);
-    if (!isSameLocalDay(_selectedDate, date)) {
-      setState(() => _selectedDate = date);
+    _selectedDate = date;
+
+    // A mirrored jump emits its own onPageChanged callback. Consume that
+    // callback instead of bouncing a second jump back to the source PageView.
+    if (_pendingSyncedPage == page && _pendingSyncedPageIsDiary == fromDiary) {
+      _pendingSyncedPage = null;
+      _pendingSyncedPageIsDiary = null;
+      return;
     }
-    _syncPageController(_pageController, page);
-    _syncPageController(_diaryPageController, page);
+
+    final otherController = fromDiary ? _pageController : _diaryPageController;
+    if (!otherController.hasClients || otherController.page?.round() == page) {
+      return;
+    }
+
+    _pendingSyncedPage = page;
+    _pendingSyncedPageIsDiary = !fromDiary;
+    otherController.jumpToPage(page);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pendingSyncedPage != page ||
+          _pendingSyncedPageIsDiary != !fromDiary) {
+        return;
+      }
+      _pendingSyncedPage = null;
+      _pendingSyncedPageIsDiary = null;
+    });
   }
 
   void _syncPageController(PageController controller, int page) {
@@ -304,7 +327,7 @@ class _TodayTabContent extends StatelessWidget {
   final ValueChanged<Task> onStartFocus;
   final PageController pageController;
   final PageController diaryPageController;
-  final ValueChanged<int> onPageChanged;
+  final void Function(int page, bool fromDiary) onPageChanged;
   final DateTime Function(int page) dateForPage;
   final VoidCallback onOpenDatePicker;
   final VoidCallback onOpenSettings;
@@ -319,7 +342,7 @@ class _TodayTabContent extends StatelessWidget {
         PageView.builder(
           controller: pageController,
           itemCount: 40001,
-          onPageChanged: onPageChanged,
+          onPageChanged: (page) => onPageChanged(page, false),
           itemBuilder: (context, page) {
             final date = dateForPage(page);
             return _TodayHomeContent(
@@ -335,7 +358,7 @@ class _TodayTabContent extends StatelessWidget {
         PageView.builder(
           controller: diaryPageController,
           itemCount: 40001,
-          onPageChanged: onPageChanged,
+          onPageChanged: (page) => onPageChanged(page, true),
           itemBuilder: (context, page) {
             final date = dateForPage(page);
             return _TodayDiaryContent(
