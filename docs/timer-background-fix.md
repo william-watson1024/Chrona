@@ -26,11 +26,12 @@ Android 通知使用系统 chronometer 展示持续倒计时；结束提醒使�
   - 移除 Provider `dispose` 对后台通知的误取消。
 - `lib/services/notification_service.dart`
   - 增加 ongoing 系统倒计时通知。
-  - 结束提醒优先使用 exact alarm；无权限时回退到 idle-safe inexact alarm。
+- Android 13+ 使用 `USE_EXACT_ALARM`，避免新安装应用默认没有精确闹钟权限而静默退化到延迟提醒。
+- Android 12 使用 `SCHEDULE_EXACT_ALARM`，并在启动计时时请求用户授予权限；拒绝时仍回退到 idle-safe inexact alarm。
 - `lib/screens/today/today_screen.dart`
   - App 启动后恢复活动会话并重新打开计时页。
 - `android/app/src/main/AndroidManifest.xml`
-  - 增加 `SCHEDULE_EXACT_ALARM` 声明。
+  - Android 12 增加 `SCHEDULE_EXACT_ALARM`；Android 13+ 增加 `USE_EXACT_ALARM` 声明。
 - `test/widget_test.dart`
   - 增加后台延迟 28 分钟后仍在原始 25 分钟结束的回归测试。
 
@@ -41,8 +42,8 @@ Android 通知使用系统 chronometer 展示持续倒计时；结束提醒使�
 ## 5. Android 权限/配置
 
 - 已有 `POST_NOTIFICATIONS`、`VIBRATE`、`RECEIVE_BOOT_COMPLETED` 保持不变。
-- 新增 `SCHEDULE_EXACT_ALARM`，启动计时时尝试请求精确闹钟权限。
-- 用户未授予精确闹钟权限时，系统定时提醒回退到 `inexactAllowWhileIdle`；App 内部状态仍以 `endsAt` 为准。
+- Android 12 使用 `SCHEDULE_EXACT_ALARM`，启动计时时尝试请求精确闹钟权限。
+- Android 13+ 声明 `USE_EXACT_ALARM`，由系统安装时授予精确闹钟能力；未能获得精确闹钟能力时记录降级日志并回退到 `inexactAllowWhileIdle`。
 - 没有新增 Foreground Service。当前计时不需要后台持续执行代码，系统通知 chronometer 和定时通知即可完成展示与提醒；这样也避免引入 Android 14/15 的 FGS 类型、后台启动和时限约束。
 - 通知使用公开锁屏可见性、ongoing、不可自动滑除和系统倒计时。
 
@@ -57,7 +58,7 @@ Android 通知使用系统 chronometer 展示持续倒计时；结束提醒使�
 ## 7. 尚未自动验证、必须真机测试的内容
 
 - Android 15 真机锁屏后的通知 chronometer 显示。
-- 首次授予/拒绝通知权限和精确闹钟权限后的提醒行为。
+- Android 12 首次授予/拒绝精确闹钟权限后的提醒行为，以及 Android 13+ 的自动授权行为。
 - 切换到其他 App、深度息屏、电池优化和厂商后台限制下的到点提醒。
 - Android 进程被系统回收后重新打开 App 的恢复流程。
 - 用户手动停止、取消通知和重复打开 App 时是否符合具体机型的通知行为。

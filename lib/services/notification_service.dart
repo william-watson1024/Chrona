@@ -310,6 +310,12 @@ class NotificationService {
         }
         if (canScheduleExact) {
           scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+          debugPrint('CHRONA: scheduling end reminder with exactAllowWhileIdle');
+        } else {
+          debugPrint(
+            'CHRONA: exact-alarm access unavailable; using inexactAllowWhileIdle. '
+            'Android may defer this reminder while the device is idle.',
+          );
         }
       }
 
@@ -329,10 +335,13 @@ class NotificationService {
 
       try {
         await schedule(scheduleMode);
-      } catch (_) {
+      } catch (error, stackTrace) {
         // A device can revoke exact-alarm access while the app is running.
         // Keep the reminder instead of losing it altogether.
         if (scheduleMode != AndroidScheduleMode.exactAllowWhileIdle) rethrow;
+        debugPrint('CHRONA exact reminder scheduling failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        debugPrint('CHRONA: retrying with inexactAllowWhileIdle');
         await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
       }
     });
