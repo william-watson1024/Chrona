@@ -34,6 +34,22 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
   bool _isSaving = false;
   String? _saveError;
 
+  bool get _isCompleted =>
+      widget.session.status == FocusTimerStatus.finished;
+
+  void _returnFromNote() {
+    final navigator = Navigator.of(context);
+    if (_isCompleted) {
+      navigator.popUntil((route) => route.isFirst);
+    } else {
+      navigator.pop();
+    }
+  }
+
+  void _handleSystemBack(bool didPop) {
+    if (!didPop && _isCompleted) _returnFromNote();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -140,7 +156,10 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_isCompleted,
+      onPopInvoked: _handleSystemBack,
+      child: Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -151,7 +170,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _NoteTopBar(onBack: () => Navigator.of(context).pop()),
+                    _NoteTopBar(onBack: _returnFromNote),
                     const SizedBox(height: 72),
                     Text(
                       widget.session.status == FocusTimerStatus.cancelled
@@ -258,7 +277,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
               selectedIndex: 0,
               onTabSelected: (index) {
                 if (index == 0) {
-                  Navigator.of(context).pop();
+                  _returnFromNote();
                 } else if (index == 1) {
                   Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const HistoryScreen()));
@@ -268,6 +287,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
             SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
         ),
+      ),
       ),
     );
   }
