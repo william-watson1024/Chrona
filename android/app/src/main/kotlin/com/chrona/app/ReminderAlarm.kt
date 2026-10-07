@@ -48,7 +48,8 @@ object ReminderAlarm {
     private const val EXTRA_SOUND = "play_sound"
     private const val EXTRA_VIBRATE = "vibrate"
     const val MAX_ALERT_MILLIS = 60_000L
-    private val vibrationPattern = LongArray(121) { index ->
+    // Three 500 ms vibration pulses separated by 500 ms pauses.
+    private val vibrationPattern = LongArray(7) { index ->
         when {
             index == 0 -> 0L
             index % 2 == 1 -> 500L
@@ -419,25 +420,31 @@ class ReminderAlertService : Service() {
     }
 
     private fun startSound() {
+        val player = MediaPlayer()
+        mediaPlayer = player
         try {
             val alarmFile = File(cacheDir, "chrona_alarm.mp3")
             assets.open("flutter_assets/assets/ring/ring.mp3").use { input ->
                 alarmFile.outputStream().use { output -> input.copyTo(output) }
             }
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-                setWakeMode(applicationContext, android.os.PowerManager.PARTIAL_WAKE_LOCK)
-                setDataSource(alarmFile.absolutePath)
-                isLooping = true
-                prepare()
-                start()
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.setWakeMode(applicationContext, android.os.PowerManager.PARTIAL_WAKE_LOCK)
+            player.setDataSource(alarmFile.absolutePath)
+            player.isLooping = false
+            player.setOnCompletionListener { completedPlayer ->
+                completedPlayer.release()
+                if (mediaPlayer === completedPlayer) mediaPlayer = null
             }
+            player.prepare()
+            player.start()
         } catch (error: Exception) {
+            player.runCatching { release() }
+            if (mediaPlayer === player) mediaPlayer = null
             Log.e("CHRONA", "Could not play bundled timer sound", error)
         }
     }
