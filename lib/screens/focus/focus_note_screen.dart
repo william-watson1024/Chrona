@@ -34,20 +34,8 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
   bool _isSaving = false;
   String? _saveError;
 
-  bool get _isCompleted =>
-      widget.session.status == FocusTimerStatus.finished;
-
   void _returnFromNote() {
-    final navigator = Navigator.of(context);
-    if (_isCompleted) {
-      navigator.popUntil((route) => route.isFirst);
-    } else {
-      navigator.pop();
-    }
-  }
-
-  void _handleSystemBack(bool didPop) {
-    if (!didPop && _isCompleted) _returnFromNote();
+    Navigator.of(context).pop();
   }
 
   @override
@@ -156,10 +144,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isCompleted,
-      onPopInvoked: _handleSystemBack,
-      child: Scaffold(
+    return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -287,7 +272,6 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
             SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
         ),
-      ),
       ),
     );
   }

@@ -115,7 +115,7 @@ class _FocusScreenState extends State<FocusScreen> {
     }
 
     if (!mounted) return;
-    Navigator.of(context).push(
+    Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => FocusNoteScreen(
           session: sessionResult,
