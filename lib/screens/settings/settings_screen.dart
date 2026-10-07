@@ -454,6 +454,10 @@ class _ReminderModeSetting extends StatelessWidget {
               value: ReminderMode.ringAndVibrate,
               child: Text('\u54cd\u94c3\u5e76\u9707\u52a8'),
             ),
+            DropdownMenuItem(
+              value: ReminderMode.notificationOnly,
+              child: Text('\u4ec5\u901a\u77e5'),
+            ),
           ],
           onChanged: (newValue) {
             if (newValue != null) onChanged(newValue);

@@ -88,7 +88,12 @@ class DataTransferService {
       }
       final reminderMode = settings['reminder_mode'];
       if (reminderMode is String &&
-          const <String>{'ring', 'vibrate', 'ringAndVibrate'}
+          const <String>{
+            'ring',
+            'vibrate',
+            'ringAndVibrate',
+            'notificationOnly',
+          }
               .contains(reminderMode)) {
         final preferences = await SharedPreferences.getInstance();
         await preferences.setString('reminder_mode', reminderMode);

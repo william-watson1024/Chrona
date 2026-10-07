@@ -323,7 +323,9 @@ class _FocusScreenState extends State<FocusScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                isBreak ? '休息结束后将响铃并震动' : '时间结束后将通过震动提醒',
+                                isBreak
+                                    ? '休息结束后按设置方式提醒'
+                                    : '时间结束后按设置方式提醒',
                                 style: const TextStyle(
                                   color: Color(0xFF8B8B8B),
                                   fontSize: 17,

@@ -247,8 +247,10 @@ class NotificationService {
         (mode) => mode.name == configuredMode,
         orElse: () => FocusSettingsProvider.defaultReminderMode,
       );
-      final playSound = reminderMode != ReminderMode.vibrate;
-      final enableVibration = reminderMode != ReminderMode.ring;
+      final playSound = reminderMode == ReminderMode.ring ||
+          reminderMode == ReminderMode.ringAndVibrate;
+      final enableVibration = reminderMode == ReminderMode.vibrate ||
+          reminderMode == ReminderMode.ringAndVibrate;
 
       final durationLabel = plannedDurationSeconds == null
           ? ''
@@ -379,4 +381,3 @@ class NotificationService {
     return '$seconds 秒';
   }
 }
-

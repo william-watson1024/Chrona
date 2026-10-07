@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum ReminderMode { ring, vibrate, ringAndVibrate }
+enum ReminderMode { ring, vibrate, ringAndVibrate, notificationOnly }
 
 class FocusSettingsProvider extends ChangeNotifier {
   FocusSettingsProvider()
