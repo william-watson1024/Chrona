@@ -17,7 +17,7 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const int focusNotificationId = 1001;
-  static const String _defaultChannelId = 'chrona_default_alerts_v1';
+  static const String _defaultChannelId = 'chrona_default_alerts_v2';
   static const String _ringChannelId = 'chrona_reminder_ring_v1';
   static const String _vibrateChannelId = 'chrona_reminder_vibrate_v1';
   static const String _ringAndVibrateChannelId =
@@ -26,6 +26,7 @@ class NotificationService {
     'chrona_focus_progress_v1',
     'chrona_break_progress_v1',
     'chrona_reminder_service_v1',
+    'chrona_default_alerts_v1',
     _ringChannelId,
     _vibrateChannelId,
     _ringAndVibrateChannelId,
