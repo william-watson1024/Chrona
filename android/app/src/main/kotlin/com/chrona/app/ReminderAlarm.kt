@@ -193,11 +193,28 @@ object ReminderAlarm {
     fun startVibration(context: Context, enabled: Boolean) {
         if (!enabled) return
         val vibrator = getVibrator(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(vibrationPattern, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(vibrationPattern, -1)
+        if (!vibrator.hasVibrator()) {
+            Log.w("CHRONA", "This device does not report a vibrator")
+            return
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val amplitudes = IntArray(vibrationPattern.size) { index ->
+                    if (index > 0 && index % 2 == 1) 255 else 0
+                }
+                val effect = VibrationEffect.createWaveform(vibrationPattern, amplitudes, -1)
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                vibrator.vibrate(effect, attributes)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(vibrationPattern, -1)
+            }
+            Log.i("CHRONA", "Started timer alarm vibration")
+        } catch (error: Exception) {
+            Log.e("CHRONA", "Could not start timer alarm vibration", error)
         }
     }
 
