@@ -11,17 +11,17 @@ import '../providers/focus_settings_provider.dart';
 
 /// Schedules focus and break reminders.
 ///
-/// There is intentionally only one notification id: CHRONA has one active
-/// focus session at a time, and reusing the id makes replacing an old
-/// schedule explicit and reliable.
+/// CHRONA has one active timer. Android owns its system alarm and countdown;
+/// iOS uses scheduled local notifications.
 class NotificationService {
   NotificationService._();
 
   static final NotificationService instance = NotificationService._();
 
   static const int focusNotificationId = 1001;
-  static const MethodChannel _directAlarmChannel =
-      MethodChannel('com.chrona.app/direct_alarm');
+  static const MethodChannel _reminderAlarmChannel =
+      MethodChannel('com.chrona.app/reminder_alarm');
+  static const String _focusTimerChannelId = 'chrona_focus_timer_v2';
   static const String _defaultChannelId = 'chrona_default_alerts_v3';
   static const String _ringChannelId = 'chrona_reminder_ring_v1';
   static const String _vibrateChannelId = 'chrona_reminder_vibrate_v1';
@@ -47,10 +47,6 @@ class NotificationService {
     'chrona_break_alerts_v5',
     'chrona_focus_alerts_v4',
   ];
-  static const String _stopReminderActionId = 'stop_focus_reminder';
-  static const AndroidNotificationSound _systemDefaultSound =
-      UriAndroidNotificationSound(
-          'content://settings/system/notification_sound');
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -58,6 +54,7 @@ class NotificationService {
   Future<void>? _initialization;
   Future<void> _operation = Future<void>.value();
   bool _initialized = false;
+  bool _notificationPermissionRequestAttempted = false;
 
   Future<void> initialize() {
     return _initialization ??= _initialize();
@@ -79,20 +76,26 @@ class NotificationService {
         iOS: darwinSettings,
       );
 
-      await _plugin.initialize(
-        settings,
-        onDidReceiveNotificationResponse: _handleNotificationResponse,
-        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-      );
+      await _plugin.initialize(settings);
 
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      // Android notification channels are persistent and immutable. Remove
-      // channels from earlier CHRONA builds, including the old v3 collision
-      // where the focus and break channel IDs overlapped after an upgrade.
+      // Remove channels left by earlier builds before creating the dedicated
+      // silent countdown channel.
       for (final channelId in _legacyChannelIds) {
         await android?.deleteNotificationChannel(channelId);
       }
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _focusTimerChannelId,
+          '专注计时',
+          description: '静音显示专注或休息倒计时',
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
+          showBadge: false,
+        ),
+      );
       _initialized = true;
     } catch (error, stackTrace) {
       // Widget tests and unsupported platforms do not have the native plugin
@@ -112,14 +115,13 @@ class NotificationService {
     await initialize();
     if (!_initialized) return false;
 
-    // Direct audio and vibration do not require Android notification access.
-    if (Platform.isAndroid) return true;
-
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       final notificationsEnabled = await android?.areNotificationsEnabled();
-      if (notificationsEnabled == false) {
+      if (notificationsEnabled == false &&
+          !_notificationPermissionRequestAttempted) {
+        _notificationPermissionRequestAttempted = true;
         await android?.requestNotificationsPermission();
       }
 
@@ -140,18 +142,18 @@ class NotificationService {
   }) {
     return _enqueue(() async {
       await initialize();
-      if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
+      if (!_initialized ||
+          (Platform.isIOS && !endsAt.isAfter(DateTime.now()))) {
+        return;
+      }
 
-      // Android keeps the timer inside the app and plays the bundled alarm
-      // directly; it does not post a notification or create a channel.
-      if (Platform.isAndroid) return;
-
-      await requestPermission();
+      final permitted = await requestPermission();
+      if (!permitted) return;
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          _defaultChannelId,
+          _focusTimerChannelId,
           title,
-          channelDescription: 'CHRONA ${isBreak ? '休息' : '专注'}计时',
+          channelDescription: '静音显示 CHRONA ${isBreak ? '休息' : '专注'}倒计时',
           importance: Importance.low,
           priority: Priority.low,
           playSound: false,
@@ -170,9 +172,6 @@ class NotificationService {
         iOS: const DarwinNotificationDetails(presentSound: false),
       );
 
-      // The end reminder deliberately reuses this id. When Android delivers
-      // the scheduled notification, it replaces the non-dismissible ongoing
-      // countdown with the completion reminder.
       await _plugin.cancel(focusNotificationId);
       await _plugin.show(
         focusNotificationId,
@@ -193,6 +192,8 @@ class NotificationService {
     return _scheduleEnd(
       title: '专注完成',
       body: (durationLabel) => '$taskTitle\n本轮 $durationLabel 已结束',
+      timerTitle: '拾年 · 专注中',
+      timerBody: taskTitle,
       endsAt: endsAt,
       plannedDurationSeconds: plannedDurationSeconds,
       payload: 'focus_finished',
@@ -207,6 +208,8 @@ class NotificationService {
     return _scheduleEnd(
       title: '休息结束',
       body: (_) => '准备开始下一轮专注',
+      timerTitle: '拾年 · 休息中',
+      timerBody: '短休息',
       endsAt: endsAt,
       plannedDurationSeconds: null,
       payload: 'break_finished',
@@ -217,6 +220,8 @@ class NotificationService {
   Future<void> _scheduleEnd({
     required String title,
     required String Function(String durationLabel) body,
+    required String timerTitle,
+    required String timerBody,
     required DateTime endsAt,
     required int? plannedDurationSeconds,
     required String payload,
@@ -224,7 +229,10 @@ class NotificationService {
   }) {
     return _enqueue(() async {
       await initialize();
-      if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
+      if (!_initialized ||
+          (Platform.isIOS && !endsAt.isAfter(DateTime.now()))) {
+        return;
+      }
 
       // Request again when the user starts a focus session. Android may have
       // denied the cold-start request, and asking here gives the user another
@@ -247,25 +255,18 @@ class NotificationService {
           : _formatDuration(plannedDurationSeconds);
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          _defaultChannelId,
+          _focusTimerChannelId,
           title,
-          channelDescription: 'CHRONA $title',
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          sound: _systemDefaultSound,
-          enableVibration: true,
+          channelDescription: '专注倒计时状态',
+          importance: Importance.low,
+          priority: Priority.low,
+          playSound: false,
+          enableVibration: false,
           ongoing: true,
           autoCancel: false,
-          category: AndroidNotificationCategory.alarm,
+          silent: true,
+          category: AndroidNotificationCategory.progress,
           visibility: NotificationVisibility.public,
-          actions: const <AndroidNotificationAction>[
-            AndroidNotificationAction(
-              _stopReminderActionId,
-              '停止提醒',
-              cancelNotification: true,
-            ),
-          ],
         ),
         iOS: DarwinNotificationDetails(presentSound: playSound),
       );
@@ -293,14 +294,27 @@ class NotificationService {
 
       if (Platform.isAndroid) {
         try {
-          await _directAlarmChannel.invokeMethod<void>('schedule', <String, Object>{
-            'triggerAtMillis': endsAt.millisecondsSinceEpoch,
-            'exact': scheduleMode == AndroidScheduleMode.exactAllowWhileIdle,
-            'playSound': playSound,
-            'enableVibration': enableVibration,
-          });
+          final usedExact = await _reminderAlarmChannel.invokeMethod<bool>(
+            'schedule',
+            <String, Object>{
+              'title': title,
+              'body': body(durationLabel),
+              'timerTitle': timerTitle,
+              'timerBody': timerBody,
+              'triggerAtMillis': endsAt.millisecondsSinceEpoch,
+              'exact': scheduleMode == AndroidScheduleMode.exactAllowWhileIdle,
+              'playSound': playSound,
+              'vibrate': enableVibration,
+              'promptOnFallback': requestExactAlarmPermission,
+            },
+          );
+          if (usedExact != true) {
+            debugPrint(
+              'CHRONA: exact alarm unavailable; an inexact allow-while-idle alarm was scheduled. Android may delay it.',
+            );
+          }
         } catch (error, stackTrace) {
-          debugPrint('CHRONA direct alarm scheduling failed: $error');
+          debugPrint('CHRONA system alarm scheduling failed: $error');
           debugPrintStack(stackTrace: stackTrace);
         }
         return;
@@ -339,7 +353,7 @@ class NotificationService {
       if (!_initialized) return;
       try {
         if (Platform.isAndroid) {
-          await _directAlarmChannel.invokeMethod<void>('cancel');
+          await _reminderAlarmChannel.invokeMethod<void>('cancel');
         }
         await _plugin.cancel(focusNotificationId);
       } catch (error, stackTrace) {
@@ -347,17 +361,6 @@ class NotificationService {
         debugPrintStack(stackTrace: stackTrace);
       }
     });
-  }
-
-  Future<void> _handleNotificationResponse(
-    NotificationResponse response,
-  ) async {
-    if (response.actionId == _stopReminderActionId) {
-      await cancelFocusEnd();
-    }
-    // Tapping the notification body launches/resumes the Flutter activity.
-    // FocusProvider observes the resumed lifecycle and moves to finished;
-    // FocusScreen then opens the completion/record page.
   }
 
   Future<void> _enqueue(Future<void> Function() operation) {
@@ -377,9 +380,3 @@ class NotificationService {
   }
 }
 
-@pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse response) {
-  // The action is declared with cancelNotification: true, so Android removes
-  // the displayed reminder even when this callback runs in a background
-  // isolate. No custom background service is needed.
-}

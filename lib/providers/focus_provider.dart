@@ -83,7 +83,10 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
           startedAt == null) {
         throw const FormatException('Invalid timer timestamps');
       }
-      if (status != 'running' && status != 'paused') {
+      if (status != 'running' &&
+          status != 'paused' &&
+          status != 'finished' &&
+          status != 'cancelled') {
         throw const FormatException('Invalid timer status');
       }
       if (mode != 'focus' && mode != 'rest') {
@@ -98,13 +101,23 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       provider.startedAt = startedAt;
       provider.endsAt = _readPersistedDateTime(snapshot['ends_at']);
       provider.pausedAt = _readPersistedDateTime(snapshot['paused_at']);
+      provider._totalPausedMilliseconds =
+          _readPersistedInt(snapshot['total_paused_ms']) ?? 0;
       provider.pausedRemainingSeconds = _readPersistedInt(
         snapshot['paused_remaining_seconds'],
+      );
+      provider._pausedRemainingMilliseconds = _readPersistedInt(
+        snapshot['paused_remaining_ms'],
       );
       provider.isCountUp = snapshot['is_count_up'] == true;
       provider.status = status == 'paused'
           ? FocusTimerStatus.paused
-          : FocusTimerStatus.running;
+          : status == 'finished'
+              ? FocusTimerStatus.finished
+              : status == 'cancelled'
+                  ? FocusTimerStatus.cancelled
+                  : FocusTimerStatus.running;
+      provider.endedAt = _readPersistedDateTime(snapshot['ended_at']);
 
       if (provider.isRunning) {
         if (provider.endsAt == null) {
@@ -115,12 +128,17 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
           provider._startTicker();
           provider._scheduleNotification();
         }
-      } else {
+      } else if (provider.isPaused) {
         final pausedRemaining = provider.pausedRemainingSeconds;
         if (pausedRemaining == null || pausedRemaining < 0) {
           throw const FormatException('Paused timer has no remaining time');
         }
         provider.remainingSeconds = pausedRemaining;
+      } else {
+        if (provider.isBreak || provider.endedAt == null) {
+          throw const FormatException('Invalid finished timer state');
+        }
+        provider.remainingSeconds = 0;
       }
 
       return provider;
@@ -150,8 +168,10 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? endsAt;
   DateTime? pausedAt;
   DateTime? endedAt;
+  int _totalPausedMilliseconds = 0;
   int remainingSeconds;
   int? pausedRemainingSeconds;
+  int? _pausedRemainingMilliseconds;
   FocusTimerStatus status = FocusTimerStatus.idle;
   bool isCountUp = false;
 
@@ -177,7 +197,13 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     final start = startedAt;
     final end = endedAt;
     if (start == null || end == null) return 0;
-    final seconds = end.difference(start).inSeconds;
+    var pausedMilliseconds = _totalPausedMilliseconds;
+    final pauseStartedAt = pausedAt;
+    if (pauseStartedAt != null) {
+      pausedMilliseconds += end.difference(pauseStartedAt).inMilliseconds;
+    }
+    final seconds =
+        (end.difference(start).inMilliseconds - pausedMilliseconds) ~/ 1000;
     return seconds < 0 ? 0 : seconds;
   }
 
@@ -216,7 +242,9 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     _refreshFromClock();
     if (status != FocusTimerStatus.running) return;
     pausedAt = _now();
-    pausedRemainingSeconds = remainingSeconds;
+    _pausedRemainingMilliseconds =
+        endsAt!.difference(pausedAt!).inMilliseconds.clamp(0, 1 << 31).toInt();
+    pausedRemainingSeconds = (_pausedRemainingMilliseconds! / 1000).ceil();
     _ticker?.cancel();
     _ticker = null;
     endsAt = null;
@@ -228,10 +256,18 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void resume() {
     if (status != FocusTimerStatus.paused) return;
+    final pauseStartedAt = pausedAt;
+    if (pauseStartedAt != null) {
+      _totalPausedMilliseconds +=
+          _now().difference(pauseStartedAt).inMilliseconds;
+    }
     remainingSeconds = pausedRemainingSeconds ?? remainingSeconds;
-    endsAt = _now().add(Duration(seconds: remainingSeconds));
+    final remainingMilliseconds =
+        _pausedRemainingMilliseconds ?? remainingSeconds * 1000;
+    endsAt = _now().add(Duration(milliseconds: remainingMilliseconds));
     pausedAt = null;
     pausedRemainingSeconds = null;
+    _pausedRemainingMilliseconds = null;
     status = FocusTimerStatus.running;
     _startTicker();
     _persistActiveState();
@@ -250,10 +286,14 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     endedAt = _now();
+    if (pausedAt != null) {
+      _totalPausedMilliseconds += endedAt!.difference(pausedAt!).inMilliseconds;
+      pausedAt = null;
+    }
     status = FocusTimerStatus.cancelled;
     _ticker?.cancel();
     _ticker = null;
-    _clearPersistedState();
+    _persistActiveState();
     unawaited(NotificationService.instance.cancelFocusEnd());
     notifyListeners();
   }
@@ -310,7 +350,11 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       status = FocusTimerStatus.finished;
       _ticker?.cancel();
       _ticker = null;
-      _clearPersistedState();
+      if (isBreak) {
+        _clearPersistedState();
+      } else {
+        _persistActiveState();
+      }
       if (notify) notifyListeners();
       return;
     }
@@ -322,6 +366,19 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   void _scheduleNotification({bool requestExactAlarmPermission = true}) {
     final end = endsAt;
     if (end == null) return;
+    unawaited(_scheduleAfterPersisting(end, requestExactAlarmPermission));
+  }
+
+  Future<void> _scheduleAfterPersisting(
+    DateTime end,
+    bool requestExactAlarmPermission,
+  ) async {
+    await _persistenceQueue;
+    if ((status != FocusTimerStatus.running &&
+            status != FocusTimerStatus.finished) ||
+        endsAt != end) {
+      return;
+    }
     unawaited(NotificationService.instance.showOngoingTimer(
       endsAt: end,
       title: isBreak ? '拾年 · 休息中' : '拾年 · 专注中',
@@ -353,10 +410,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _persistActiveState() {
-    if (!_persistenceEnabled ||
-        (status != FocusTimerStatus.running &&
-            status != FocusTimerStatus.paused) ||
-        startedAt == null) {
+    if (!_persistenceEnabled || startedAt == null) {
       return;
     }
 
@@ -366,9 +420,12 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
       'mode': mode.name,
       'planned_duration_seconds': plannedDurationSeconds,
       'started_at': startedAt!.millisecondsSinceEpoch,
+      'ended_at': endedAt?.millisecondsSinceEpoch,
       'ends_at': endsAt?.millisecondsSinceEpoch,
       'paused_at': pausedAt?.millisecondsSinceEpoch,
       'paused_remaining_seconds': pausedRemainingSeconds,
+      'paused_remaining_ms': _pausedRemainingMilliseconds,
+      'total_paused_ms': _totalPausedMilliseconds,
       'is_count_up': isCountUp,
       'task': task.toMap(),
     };

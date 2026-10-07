@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Android 12 uses the user-controlled exact-alarm permission. Android 13+
          grants USE_EXACT_ALARM at install for apps whose core feature is a timer. -->
     <uses-permission
@@ -28,10 +31,22 @@
             </intent-filter>
         </activity>
         <receiver
-            android:name=".DirectAlarmReceiver"
+            android:name=".ReminderAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".ReminderBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".StopReminderReceiver"
             android:exported="false" />
         <service
-            android:name=".DirectAlarmPlaybackService"
+            android:name=".ReminderAlertService"
+            android:foregroundServiceType="shortService"
             android:exported="false" />
         <meta-data
             android:name="flutterEmbedding"

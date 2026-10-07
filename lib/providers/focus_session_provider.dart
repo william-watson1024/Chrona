@@ -5,6 +5,8 @@ import '../models/focus_session.dart';
 import '../utils/focus_formatters.dart';
 
 class FocusSessionProvider extends ChangeNotifier {
+  static final Map<String, Future<FocusSession?>> _sessionSaveQueue = {};
+
   FocusSessionProvider({AppDatabase? database})
       : _database = database ?? AppDatabase.instance,
         _sessions = [];
@@ -94,15 +96,60 @@ class FocusSessionProvider extends ChangeNotifier {
   }
 
   Future<FocusSession?> saveSessionIfAbsent(FocusSession session) async {
+    final key = _sessionKey(session);
+    final pending = _sessionSaveQueue[key];
+    if (pending != null) return pending;
+
+    final operation = _saveSessionIfAbsent(session);
+    _sessionSaveQueue[key] = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_sessionSaveQueue[key], operation)) {
+        _sessionSaveQueue.remove(key);
+      }
+    }
+  }
+
+  Future<FocusSession?> _saveSessionIfAbsent(FocusSession session) async {
     await loadSessions();
-    final existing = _sessions.where((item) =>
-        item.taskId == session.taskId &&
-        item.startedAt.isAtSameMomentAs(session.startedAt) &&
-        item.endedAt.isAtSameMomentAs(session.endedAt) &&
-        item.status == session.status);
-    if (existing.isNotEmpty) return existing.first;
+    FocusSession? existing;
+    if (_isInMemory) {
+      for (final item in _sessions) {
+        if (_sameSession(item, session)) {
+          existing = item;
+          break;
+        }
+      }
+    } else {
+      existing = await _database.findFocusSession(
+        taskId: session.taskId,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        status: session.status.databaseValue,
+      );
+    }
+    if (existing != null) {
+      final existingSession = existing!;
+      if (!_sessions.any((item) => item.id == existingSession.id)) {
+        _sessions.add(existingSession);
+        _sortSessions();
+        notifyListeners();
+      }
+      return existingSession;
+    }
     return saveSession(session);
   }
+
+  String _sessionKey(FocusSession session) =>
+      '${session.taskId ?? 'null'}:${session.startedAt.millisecondsSinceEpoch}:'
+      '${session.endedAt.millisecondsSinceEpoch}:${session.status.databaseValue}';
+
+  bool _sameSession(FocusSession first, FocusSession second) =>
+      first.taskId == second.taskId &&
+      first.startedAt.isAtSameMomentAs(second.startedAt) &&
+      first.endedAt.isAtSameMomentAs(second.endedAt) &&
+      first.status == second.status;
 
   Future<FocusSession?> updateSessionNote(
     FocusSession session,

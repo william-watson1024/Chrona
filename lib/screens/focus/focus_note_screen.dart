@@ -94,9 +94,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
               taskTitleSnapshot: taskTitle,
               note: session.note,
             )
-          : widget.session.status == FocusTimerStatus.finished
-              ? await _sessionProvider.saveSessionIfAbsent(session)
-              : await _sessionProvider.saveSession(session);
+          : await _sessionProvider.saveSessionIfAbsent(session);
       if (!mounted) return;
       if (saved == null) {
         setState(() {
@@ -105,6 +103,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         });
         return;
       }
+      await FocusProvider.clearPersistedState();
       if (taskProvider != null) {
         await taskProvider.updateTask(updatedTask);
       }

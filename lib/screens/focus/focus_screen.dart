@@ -105,6 +105,9 @@ class _FocusScreenState extends State<FocusScreen> {
               createdAt: sessionResult.endedAt,
             ),
           );
+          if (savedSession != null) {
+            await FocusProvider.clearPersistedState();
+          }
         } catch (_) {
           // Keep the note page available so the user can retry saving there.
         }

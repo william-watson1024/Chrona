@@ -223,6 +223,54 @@ void main() {
     provider.dispose();
   });
 
+  test('paused time is excluded from a completed focus session', () {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    final provider = FocusProvider(
+      task: const Task(
+        id: 1,
+        title: '测试任务',
+        completed: false,
+        createdAt: 1,
+      ),
+      plannedDurationSeconds: 10,
+      now: () => currentTime,
+    );
+
+    provider.start();
+    currentTime = currentTime.add(const Duration(milliseconds: 3500));
+    provider.pause();
+    currentTime = currentTime.add(const Duration(minutes: 1));
+    provider.resume();
+    currentTime = provider.endsAt!;
+    provider.didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+    expect(provider.status, FocusTimerStatus.finished);
+    expect(provider.endedAt, currentTime);
+    expect(provider.actualDurationSeconds, 10);
+    provider.dispose();
+  });
+
+  test('saving the same focus session twice is idempotent', () async {
+    final provider = FocusSessionProvider.inMemory();
+    final startedAt = DateTime(2026, 9, 27, 20, 0);
+    final session = FocusSession(
+      taskId: 1,
+      taskTitleSnapshot: '测试任务',
+      startedAt: startedAt,
+      endedAt: startedAt.add(const Duration(seconds: 30)),
+      plannedDurationSeconds: 30,
+      actualDurationSeconds: 30,
+      note: null,
+      status: FocusSessionStatus.completed,
+      createdAt: startedAt.add(const Duration(seconds: 30)),
+    );
+
+    await provider.saveSessionIfAbsent(session);
+    await provider.saveSessionIfAbsent(session);
+
+    expect(provider.sessions, hasLength(1));
+  });
+
   testWidgets('completed focus saves and enters break mode', (tester) async {
     var currentTime = DateTime(2026, 9, 27, 20, 0);
     final focusProvider = FocusProvider(

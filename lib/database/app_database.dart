@@ -278,6 +278,29 @@ class AppDatabase {
     return rows.map(FocusSession.fromMap).toList();
   }
 
+  Future<FocusSession?> findFocusSession({
+    required int? taskId,
+    required DateTime startedAt,
+    required DateTime endedAt,
+    required String status,
+  }) async {
+    final db = await database;
+    final taskClause = taskId == null ? 'task_id IS NULL' : 'task_id = ?';
+    final whereArgs = <Object?>[
+      if (taskId != null) taskId,
+      startedAt.millisecondsSinceEpoch,
+      endedAt.millisecondsSinceEpoch,
+      status,
+    ];
+    final rows = await db.query(
+      'focus_session',
+      where: '$taskClause AND started_at = ? AND ended_at = ? AND status = ?',
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+    return rows.isEmpty ? null : FocusSession.fromMap(rows.first);
+  }
+
   Future<FocusSession> insertFocusSession(FocusSession session) async {
     final db = await database;
     final id = await db.insert('focus_session', session.toMap()..remove('id'));
