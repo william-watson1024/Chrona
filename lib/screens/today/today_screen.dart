@@ -341,7 +341,6 @@ class _TodayTabContent extends StatelessWidget {
       children: [
         PageView.builder(
           controller: pageController,
-          itemCount: 40001,
           onPageChanged: (page) => onPageChanged(page, false),
           itemBuilder: (context, page) {
             final date = dateForPage(page);
@@ -357,7 +356,6 @@ class _TodayTabContent extends StatelessWidget {
         ),
         PageView.builder(
           controller: diaryPageController,
-          itemCount: 40001,
           onPageChanged: (page) => onPageChanged(page, true),
           itemBuilder: (context, page) {
             final date = dateForPage(page);
