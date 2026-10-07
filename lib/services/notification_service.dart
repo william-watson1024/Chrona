@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -6,7 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../providers/focus_settings_provider.dart';
 
-/// Owns the local-notification channels used by focus and break sessions.
+/// Schedules focus and break reminders.
 ///
 /// There is intentionally only one notification id: CHRONA has one active
 /// focus session at a time, and reusing the id makes replacing an old
@@ -17,16 +20,20 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const int focusNotificationId = 1001;
-  static const String _defaultChannelId = 'chrona_default_alerts_v2';
+  static const MethodChannel _directAlarmChannel =
+      MethodChannel('com.chrona.app/direct_alarm');
+  static const String _defaultChannelId = 'chrona_default_alerts_v3';
   static const String _ringChannelId = 'chrona_reminder_ring_v1';
   static const String _vibrateChannelId = 'chrona_reminder_vibrate_v1';
   static const String _ringAndVibrateChannelId =
       'chrona_reminder_ring_vibrate_v1';
   static const List<String> _legacyChannelIds = <String>[
+    _defaultChannelId,
     'chrona_focus_progress_v1',
     'chrona_break_progress_v1',
     'chrona_reminder_service_v1',
     'chrona_default_alerts_v1',
+    'chrona_default_alerts_v2',
     _ringChannelId,
     _vibrateChannelId,
     _ringAndVibrateChannelId,
@@ -86,18 +93,6 @@ class NotificationService {
       for (final channelId in _legacyChannelIds) {
         await android?.deleteNotificationChannel(channelId);
       }
-      await android?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          _defaultChannelId,
-          '计时提醒',
-          description: '使用系统默认提醒音和震动',
-          importance: Importance.high,
-          playSound: true,
-          sound: _systemDefaultSound,
-          enableVibration: true,
-        ),
-      );
-
       _initialized = true;
     } catch (error, stackTrace) {
       // Widget tests and unsupported platforms do not have the native plugin
@@ -108,7 +103,7 @@ class NotificationService {
     }
   }
 
-  /// Requests notification permission and, when needed, exact-alarm access.
+  /// Requests any permission needed by the active reminder implementation.
   ///
   /// Exact alarms are user-facing timer functionality on Android. If the user
   /// declines the special access, scheduling falls back to an idle-safe
@@ -116,6 +111,9 @@ class NotificationService {
   Future<bool> requestPermission() async {
     await initialize();
     if (!_initialized) return false;
+
+    // Direct audio and vibration do not require Android notification access.
+    if (Platform.isAndroid) return true;
 
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<
@@ -143,6 +141,10 @@ class NotificationService {
     return _enqueue(() async {
       await initialize();
       if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
+
+      // Android keeps the timer inside the app and plays the bundled alarm
+      // directly; it does not post a notification or create a channel.
+      if (Platform.isAndroid) return;
 
       await requestPermission();
       final notificationDetails = NotificationDetails(
@@ -289,6 +291,21 @@ class NotificationService {
         }
       }
 
+      if (Platform.isAndroid) {
+        try {
+          await _directAlarmChannel.invokeMethod<void>('schedule', <String, Object>{
+            'triggerAtMillis': endsAt.millisecondsSinceEpoch,
+            'exact': scheduleMode == AndroidScheduleMode.exactAllowWhileIdle,
+            'playSound': playSound,
+            'enableVibration': enableVibration,
+          });
+        } catch (error, stackTrace) {
+          debugPrint('CHRONA direct alarm scheduling failed: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+        return;
+      }
+
       Future<void> schedule(AndroidScheduleMode mode) {
         return _plugin.zonedSchedule(
           focusNotificationId,
@@ -321,6 +338,9 @@ class NotificationService {
     return _enqueue(() async {
       if (!_initialized) return;
       try {
+        if (Platform.isAndroid) {
+          await _directAlarmChannel.invokeMethod<void>('cancel');
+        }
         await _plugin.cancel(focusNotificationId);
       } catch (error, stackTrace) {
         debugPrint('CHRONA notification cancellation failed: $error');

@@ -26,6 +26,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/image.png
+    - assets/ring/ring.mp3
     - assets/question/拾年每日一问.json
     - assets/question/特殊日期每日一问.json
     - assets/question/拾年随机问题池_4000.json
