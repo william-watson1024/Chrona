@@ -157,8 +157,28 @@ object ReminderAlarm {
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
         val pendingIntent = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
         return try {
-            if (exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            if (exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val showIntent = Intent(context, MainActivity::class.java).apply {
+                    this.flags =
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val showPendingIntent = PendingIntent.getActivity(
+                    context,
+                    REQUEST_CODE + 1,
+                    showIntent,
+                    flags,
+                )
+                val alarmClockInfo = AlarmManager.AlarmClockInfo(
+                    triggerAtMillis,
+                    showPendingIntent,
+                )
+                alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+            } else if (exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent,
+                )
             } else if (exact) {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

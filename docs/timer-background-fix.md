@@ -26,7 +26,7 @@ Android 通知使用系统 chronometer 展示持续倒计时；结束提醒使�
   - 移除 Provider `dispose` 对后台通知的误取消。
 - `lib/services/notification_service.dart`
   - 增加 ongoing 系统倒计时通知。
-- Android 13+ 使用 `USE_EXACT_ALARM`，避免新安装应用默认没有精确闹钟权限而静默退化到延迟提醒。
+- Android 13+ 使用 `USE_EXACT_ALARM`，由系统安装时授予精确闹钟权限。
 - Android 12 使用 `SCHEDULE_EXACT_ALARM`，并在启动计时时请求用户授予权限；拒绝时仍回退到 idle-safe inexact alarm。
 - `lib/screens/today/today_screen.dart`
   - App 启动后恢复活动会话并重新打开计时页。
