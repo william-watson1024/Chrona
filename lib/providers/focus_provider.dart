@@ -275,6 +275,27 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Discards a paused timer without creating a focus session.
+  void discardPaused() {
+    if (status != FocusTimerStatus.paused) return;
+
+    _ticker?.cancel();
+    _ticker = null;
+    status = FocusTimerStatus.idle;
+    startedAt = null;
+    endsAt = null;
+    pausedAt = null;
+    endedAt = null;
+    _totalPausedMilliseconds = 0;
+    remainingSeconds = plannedDurationSeconds;
+    pausedRemainingSeconds = null;
+    _pausedRemainingMilliseconds = null;
+    isCountUp = false;
+    _clearPersistedState();
+    unawaited(NotificationService.instance.cancelFocusEnd());
+    notifyListeners();
+  }
+
   void cancel() {
     if (status != FocusTimerStatus.running &&
         status != FocusTimerStatus.paused) {

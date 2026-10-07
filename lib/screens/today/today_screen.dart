@@ -204,10 +204,18 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
   }
 
   void _openFocus(Task task) {
-    final activeProvider = _activeFocusProvider;
+    var activeProvider = _activeFocusProvider;
     if (activeProvider != null &&
         activeProvider.task.id != task.id &&
-        (activeProvider.isRunning || activeProvider.isPaused)) {
+        activeProvider.isPaused) {
+      activeProvider.removeListener(_handleActiveFocusChanged);
+      activeProvider.discardPaused();
+      activeProvider.dispose();
+      _activeFocusProvider = null;
+      activeProvider = null;
+    } else if (activeProvider != null &&
+        activeProvider.task.id != task.id &&
+        activeProvider.isRunning) {
       return;
     }
     final canResume = activeProvider != null &&

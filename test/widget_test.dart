@@ -372,6 +372,74 @@ void main() {
     provider.dispose();
   });
 
+  test('discarding a paused timer clears its state without ending a session',
+      () {
+    var currentTime = DateTime(2026, 9, 27, 20, 0);
+    final provider = FocusProvider(
+      task: const Task(
+        id: 1,
+        title: '娴嬭瘯浠诲姟',
+        completed: false,
+        createdAt: 1,
+      ),
+      plannedDurationSeconds: 30,
+      now: () => currentTime,
+    );
+    provider.start();
+    currentTime = currentTime.add(const Duration(seconds: 5));
+    provider.pause();
+
+    provider.discardPaused();
+
+    expect(provider.status, FocusTimerStatus.idle);
+    expect(provider.startedAt, isNull);
+    expect(provider.pausedRemainingSeconds, isNull);
+    expect(provider.remainingSeconds, 30);
+    provider.dispose();
+  });
+
+  testWidgets('starting another task discards a paused timer', (tester) async {
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: TaskProvider.inMemory([
+          const Task(
+            id: 1,
+            title: '娴嬭瘯浠诲姟',
+            completed: false,
+            createdAt: 1,
+          ),
+          const Task(
+            id: 2,
+            title: 'Next task',
+            completed: false,
+            createdAt: 2,
+          ),
+        ]),
+        focusSessionProvider: createTestFocusSessionProvider(),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
+    await tester.pumpAndSettle();
+    final pauseButton = find.text('暂停');
+    await tester.scrollUntilVisible(
+      pauseButton,
+      240,
+      scrollable: find
+          .ancestor(of: pauseButton, matching: find.byType(Scrollable))
+          .last,
+    );
+    await tester.tap(pauseButton);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.home_filled));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Next task'), findsOneWidget);
+    expect(find.text('暂停'), findsOneWidget);
+  });
+
   testWidgets('paused focus resumes after returning to today', (tester) async {
     await tester.pumpWidget(
       ChronaApp(
