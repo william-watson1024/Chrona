@@ -560,10 +560,6 @@ class _MonthOverview extends StatelessWidget {
       daySeconds[local.day] =
           (daySeconds[local.day] ?? 0) + session.actualDurationSeconds;
     }
-    final maxSeconds = daySeconds.values.fold<int>(
-      0,
-      (max, value) => value > max ? value : max,
-    );
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final leadingEmpty = DateTime(month.year, month.month, 1).weekday - 1;
     final totalCells = ((leadingEmpty + daysInMonth + 6) ~/ 7) * 7;
@@ -624,7 +620,6 @@ class _MonthOverview extends StatelessWidget {
             return _HeatCell(
               label: '$day',
               seconds: seconds,
-              maxSeconds: maxSeconds,
               selected:
                   selectedDay != null && isSameLocalDay(selectedDay!, date),
               onTap: () => onDayTap(date),
@@ -658,9 +653,12 @@ class _YearOverview extends StatelessWidget {
       final bucket = ((local.day - 1) ~/ 7).clamp(0, 3);
       buckets[local.month - 1][bucket] += session.actualDurationSeconds;
     }
-    final maxSeconds = buckets
-        .expand((monthBuckets) => monthBuckets)
-        .fold<int>(0, (max, value) => value > max ? value : max);
+    for (var month = 1; month <= 12; month++) {
+      final daysInMonth = DateTime(year, month + 1, 0).day;
+      final daysInLastBucket = daysInMonth - 21;
+      buckets[month - 1][3] =
+          (buckets[month - 1][3] * 7 / daysInLastBucket).round();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +688,6 @@ class _YearOverview extends StatelessWidget {
                     child: _YearMonthBlock(
                       month: row * 3 + column + 1,
                       seconds: buckets[row * 3 + column],
-                      maxSeconds: maxSeconds,
                       onTap: () => onMonthTap(
                         DateTime(year, row * 3 + column + 1, 1),
                       ),
@@ -802,20 +799,18 @@ class _HeatCell extends StatelessWidget {
   const _HeatCell({
     required this.label,
     required this.seconds,
-    required this.maxSeconds,
     this.selected = false,
     required this.onTap,
   });
 
   final String label;
   final int seconds;
-  final int maxSeconds;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final level = _heatLevel(seconds, maxSeconds);
+    final level = _dayHeatLevel(seconds);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -843,13 +838,11 @@ class _YearMonthBlock extends StatelessWidget {
   const _YearMonthBlock({
     required this.month,
     required this.seconds,
-    required this.maxSeconds,
     required this.onTap,
   });
 
   final int month;
   final List<int> seconds;
-  final int maxSeconds;
   final VoidCallback onTap;
 
   @override
@@ -879,7 +872,7 @@ class _YearMonthBlock extends StatelessWidget {
                       child: Container(
                         decoration: BoxDecoration(
                           color: _heatColor(
-                            _heatLevel(seconds[index], maxSeconds),
+                            _weekHeatLevel(seconds[index]),
                           ),
                           borderRadius: BorderRadius.circular(3),
                         ),
@@ -1040,12 +1033,19 @@ class _HistoryGroup extends StatelessWidget {
 
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
-int _heatLevel(int seconds, int maxSeconds) {
-  if (seconds <= 0 || maxSeconds <= 0) return 0;
-  final ratio = seconds / maxSeconds;
-  if (ratio <= .25) return 1;
-  if (ratio <= .5) return 2;
-  if (ratio <= .75) return 3;
+int _dayHeatLevel(int seconds) {
+  if (seconds <= 0) return 0;
+  if (seconds <= 90 * 60) return 1;
+  if (seconds <= 3 * 60 * 60) return 2;
+  if (seconds <= 270 * 60) return 3;
+  return 4;
+}
+
+int _weekHeatLevel(int seconds) {
+  if (seconds <= 0) return 0;
+  if (seconds <= 6 * 60 * 60) return 1;
+  if (seconds <= 12 * 60 * 60) return 2;
+  if (seconds <= 18 * 60 * 60) return 3;
   return 4;
 }
 
