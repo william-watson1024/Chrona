@@ -186,6 +186,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     if (!mounted || restored == null) return;
 
     _activeFocusProvider = restored;
+    context.read<TaskProvider>().setFocusedTask(restored.task.id);
     restored.addListener(_handleActiveFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _activeFocusProvider != restored) return;
@@ -218,6 +219,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
         activeProvider.isRunning) {
       return;
     }
+    context.read<TaskProvider>().setFocusedTask(task.id);
     final canResume = activeProvider != null &&
         activeProvider.task.id == task.id &&
         (activeProvider.isRunning || activeProvider.isPaused);
@@ -470,7 +472,16 @@ class _TodayHomeContent extends StatelessWidget {
                 index: index,
                 child: _TaskRow(
                   task: task,
-                  onTap: () => _openTask(context, task),
+                  isFocused: task.id != null &&
+                      !task.completed &&
+                      task.id == taskProvider.focusedTaskId,
+                  focusAttentionVersion: taskProvider.focusAttentionVersion,
+                  onTap: () {
+                    if (task.id != taskProvider.focusedTaskId) {
+                      taskProvider.pulseFocusedTask();
+                    }
+                    _openTask(context, task);
+                  },
                   onToggle: () => taskProvider.toggleTask(task),
                   onDelete: () => _confirmDelete(context, task),
                   onStart: task.completed ? null : () => onStartFocus(task),
@@ -1390,9 +1401,11 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
   }
 }
 
-class _TaskRow extends StatelessWidget {
+class _TaskRow extends StatefulWidget {
   const _TaskRow({
     required this.task,
+    required this.isFocused,
+    required this.focusAttentionVersion,
     required this.onTap,
     required this.onToggle,
     required this.onDelete,
@@ -1400,79 +1413,133 @@ class _TaskRow extends StatelessWidget {
   });
 
   final Task task;
+  final bool isFocused;
+  final int focusAttentionVersion;
   final VoidCallback onTap;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback? onStart;
 
   @override
+  State<_TaskRow> createState() => _TaskRowState();
+}
+
+class _TaskRowState extends State<_TaskRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _attentionController;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _attentionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 460),
+    );
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1, end: 1.035)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.035, end: 1)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 65,
+      ),
+    ]).animate(_attentionController);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TaskRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isFocused &&
+        widget.focusAttentionVersion != oldWidget.focusAttentionVersion) {
+      _attentionController.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _attentionController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final task = widget.task;
     final textDecoration = task.completed ? TextDecoration.lineThrough : null;
     final contentColor =
         task.completed ? const Color(0xFF6F6F6F) : const Color(0xFF111111);
-    return Container(
-      constraints: const BoxConstraints(minHeight: 94),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
-          border:
-              Border(bottom: BorderSide(color: Color(0xFFE9E9E9), width: 1))),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _CompletionButton(completed: task.completed, onPressed: onToggle),
-          const SizedBox(width: 17),
-          Expanded(
-            child: GestureDetector(
-              onTap: onTap,
-              child: Opacity(
-                opacity: task.completed ? 0.65 : 1,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(task.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: contentColor,
-                            fontSize: 21,
-                            height: 1.25,
-                            fontWeight: FontWeight.w500,
-                            decoration: textDecoration,
-                            decorationThickness: 1.5)),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        const Icon(Icons.schedule_outlined,
-                            size: 18, color: Color(0xFF8A8A8A)),
-                        const SizedBox(width: 7),
-                        Flexible(
-                            child: Text(
-                                formatFocusDuration(task.durationSeconds),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Color(0xFF8A8A8A),
-                                    fontSize: 16,
-                                    height: 1.15))),
-                      ],
-                    ),
-                  ],
+    return ScaleTransition(
+      scale: _scaleAnimation,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 94),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: const BoxDecoration(
+            border: Border(
+                bottom: BorderSide(color: Color(0xFFE9E9E9), width: 1))),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _CompletionButton(
+                completed: task.completed, onPressed: widget.onToggle),
+            const SizedBox(width: 17),
+            Expanded(
+              child: GestureDetector(
+                onTap: widget.onTap,
+                child: Opacity(
+                  opacity: task.completed ? 0.65 : 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(task.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: contentColor,
+                              fontSize: 21,
+                              height: 1.25,
+                              fontWeight: FontWeight.w500,
+                              decoration: textDecoration,
+                              decorationThickness: 1.5)),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule_outlined,
+                              size: 18, color: Color(0xFF8A8A8A)),
+                          const SizedBox(width: 7),
+                          Flexible(
+                              child: Text(
+                                  formatFocusDuration(task.durationSeconds),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      color: Color(0xFF8A8A8A),
+                                      fontSize: 16,
+                                      height: 1.15))),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 17),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline, size: 20),
-            color: const Color(0xFF8A8A8A),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-            tooltip: '删除任务',
-          ),
-          _StartButton(onPressed: onStart),
-        ],
+            const SizedBox(width: 17),
+            IconButton(
+              onPressed: widget.onDelete,
+              icon: const Icon(Icons.delete_outline, size: 20),
+              color: const Color(0xFF8A8A8A),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              constraints:
+                  const BoxConstraints.tightFor(width: 32, height: 32),
+              tooltip: '删除任务',
+            ),
+            _StartButton(
+                onPressed: widget.onStart, isFocused: widget.isFocused),
+          ],
+        ),
       ),
     );
   }
@@ -1513,13 +1580,43 @@ class _CompletionButton extends StatelessWidget {
 }
 
 class _StartButton extends StatelessWidget {
-  const _StartButton({required this.onPressed});
+  const _StartButton({required this.onPressed, required this.isFocused});
 
   final VoidCallback? onPressed;
+  final bool isFocused;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    if (isFocused) {
+      return InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.graphic_eq_rounded, size: 17, color: Colors.white),
+              SizedBox(width: 4),
+              Text(
+                '正在专注',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return InkWell(
       onTap: onPressed,
       customBorder: const CircleBorder(),

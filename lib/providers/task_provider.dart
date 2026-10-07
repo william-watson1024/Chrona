@@ -24,17 +24,41 @@ class TaskProvider extends ChangeNotifier {
   bool _isLoaded = false;
   bool _isInMemory = false;
   int _nextInMemoryId = -1;
+  int? _focusedTaskId;
+  int _focusAttentionVersion = 0;
 
   List<Task> get tasks => List.unmodifiable(_tasks);
   bool get isLoading => !_isLoaded;
+  int? get focusedTaskId => _focusedTaskId;
+  int get focusAttentionVersion => _focusAttentionVersion;
   int get completedCount => _tasks.where((task) => task.completed).length;
 
   List<Task> tasksForDate(DateTime date) {
     final day = startOfDay(date);
     final result =
         _tasks.where((task) => task.effectivePlanDate == day).toList();
-    result.sort(_compareTasks);
+    result.sort((first, second) {
+      final firstIsFocused =
+          !first.completed && first.id != null && first.id == _focusedTaskId;
+      final secondIsFocused = !second.completed &&
+          second.id != null &&
+          second.id == _focusedTaskId;
+      if (firstIsFocused != secondIsFocused) return firstIsFocused ? -1 : 1;
+      return _compareTasks(first, second);
+    });
     return List.unmodifiable(result);
+  }
+
+  void setFocusedTask(int? taskId) {
+    if (_focusedTaskId == taskId) return;
+    _focusedTaskId = taskId;
+    notifyListeners();
+  }
+
+  void pulseFocusedTask() {
+    if (_focusedTaskId == null) return;
+    _focusAttentionVersion++;
+    notifyListeners();
   }
 
   int completedCountForDate(DateTime date) {
@@ -177,9 +201,9 @@ class TaskProvider extends ChangeNotifier {
   int _compareTasks(Task first, Task second) {
     final byDate = first.effectivePlanDate.compareTo(second.effectivePlanDate);
     if (byDate != 0) return byDate;
+    if (first.completed != second.completed) return first.completed ? 1 : -1;
     final byOrder = first.sortOrder.compareTo(second.sortOrder);
     if (byOrder != 0) return byOrder;
-    if (first.completed != second.completed) return first.completed ? 1 : -1;
     return second.createdAt.compareTo(first.createdAt);
   }
 }
