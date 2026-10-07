@@ -17,13 +17,18 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const int focusNotificationId = 1001;
-  static const String _focusProgressChannelId = 'chrona_focus_progress_v1';
-  static const String _breakProgressChannelId = 'chrona_break_progress_v1';
+  static const String _defaultChannelId = 'chrona_default_alerts_v1';
   static const String _ringChannelId = 'chrona_reminder_ring_v1';
   static const String _vibrateChannelId = 'chrona_reminder_vibrate_v1';
   static const String _ringAndVibrateChannelId =
       'chrona_reminder_ring_vibrate_v1';
   static const List<String> _legacyChannelIds = <String>[
+    'chrona_focus_progress_v1',
+    'chrona_break_progress_v1',
+    'chrona_reminder_service_v1',
+    _ringChannelId,
+    _vibrateChannelId,
+    _ringAndVibrateChannelId,
     'chrona_focus_alerts_v1',
     'chrona_focus_alerts_v2',
     'chrona_focus_alerts_v3',
@@ -35,37 +40,6 @@ class NotificationService {
     'chrona_focus_alerts_v4',
   ];
   static const String _stopReminderActionId = 'stop_focus_reminder';
-  // One pulse per second (500 ms on, 500 ms off) for at least ten seconds.
-  // Android's insistent flag keeps the alert active until the notification is
-  // explicitly cancelled.
-  static final Int64List _reminderVibrationPattern = Int64List.fromList(
-    <int>[
-      0,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-      500,
-    ],
-  );
-  // Android Notification.FLAG_INSISTENT.
-  static final Int32List _insistentNotificationFlag =
-      Int32List.fromList(<int>[4]);
   static const AndroidNotificationSound _systemDefaultSound =
       UriAndroidNotificationSound(
           'content://settings/system/notification_sound');
@@ -113,44 +87,14 @@ class NotificationService {
       }
       await android?.createNotificationChannel(
         const AndroidNotificationChannel(
-          _focusProgressChannelId,
-          '专注计时',
-          description: 'CHRONA 专注倒计时',
-          importance: Importance.low,
-          playSound: false,
-          enableVibration: false,
+          _defaultChannelId,
+          '计时提醒',
+          description: '使用系统默认提醒音和震动',
+          importance: Importance.high,
+          playSound: true,
+          sound: _systemDefaultSound,
+          enableVibration: true,
         ),
-      );
-      await android?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          _breakProgressChannelId,
-          '休息计时',
-          description: 'CHRONA 休息倒计时',
-          importance: Importance.low,
-          playSound: false,
-          enableVibration: false,
-        ),
-      );
-      await _createReminderChannel(
-        android,
-        _ringChannelId,
-        '计时结束提醒：响铃',
-        playSound: true,
-        enableVibration: false,
-      );
-      await _createReminderChannel(
-        android,
-        _vibrateChannelId,
-        '计时结束提醒：震动',
-        playSound: false,
-        enableVibration: true,
-      );
-      await _createReminderChannel(
-        android,
-        _ringAndVibrateChannelId,
-        '计时结束提醒：响铃并震动',
-        playSound: true,
-        enableVibration: true,
       );
 
       _initialized = true;
@@ -161,29 +105,6 @@ class NotificationService {
       debugPrint('CHRONA notification initialization failed: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
-  }
-
-  Future<void> _createReminderChannel(
-    AndroidFlutterLocalNotificationsPlugin? android,
-    String channelId,
-    String name, {
-    required bool playSound,
-    required bool enableVibration,
-  }) {
-    return android?.createNotificationChannel(
-          AndroidNotificationChannel(
-            channelId,
-            name,
-            description: 'CHRONA 专注和休息结束提醒',
-            importance: Importance.high,
-            playSound: playSound,
-            sound: playSound ? _systemDefaultSound : null,
-            enableVibration: enableVibration,
-            vibrationPattern:
-                enableVibration ? _reminderVibrationPattern : null,
-          ),
-        ) ??
-        Future<void>.value();
   }
 
   /// Requests notification permission and, when needed, exact-alarm access.
@@ -223,11 +144,9 @@ class NotificationService {
       if (!_initialized || !endsAt.isAfter(DateTime.now())) return;
 
       await requestPermission();
-      final channelId =
-          isBreak ? _breakProgressChannelId : _focusProgressChannelId;
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          channelId,
+          _defaultChannelId,
           title,
           channelDescription: 'CHRONA ${isBreak ? '休息' : '专注'}计时',
           importance: Importance.low,
@@ -317,11 +236,6 @@ class NotificationService {
         (mode) => mode.name == configuredMode,
         orElse: () => FocusSettingsProvider.defaultReminderMode,
       );
-      final channelId = switch (reminderMode) {
-        ReminderMode.ring => _ringChannelId,
-        ReminderMode.vibrate => _vibrateChannelId,
-        ReminderMode.ringAndVibrate => _ringAndVibrateChannelId,
-      };
       final playSound = reminderMode != ReminderMode.vibrate;
       final enableVibration = reminderMode != ReminderMode.ring;
 
@@ -330,19 +244,16 @@ class NotificationService {
           : _formatDuration(plannedDurationSeconds);
       final notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          channelId,
+          _defaultChannelId,
           title,
           channelDescription: 'CHRONA $title',
           importance: Importance.max,
           priority: Priority.high,
-          playSound: playSound,
-          sound: playSound ? _systemDefaultSound : null,
-          enableVibration: enableVibration,
-          vibrationPattern:
-              enableVibration ? _reminderVibrationPattern : null,
+          playSound: true,
+          sound: _systemDefaultSound,
+          enableVibration: true,
           ongoing: true,
           autoCancel: false,
-          additionalFlags: _insistentNotificationFlag,
           category: AndroidNotificationCategory.alarm,
           visibility: NotificationVisibility.public,
           actions: const <AndroidNotificationAction>[
