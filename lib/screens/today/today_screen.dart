@@ -186,7 +186,11 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     if (!mounted || restored == null) return;
 
     _activeFocusProvider = restored;
-    context.read<TaskProvider>().setFocusedTask(restored.task.id);
+    context.read<TaskProvider>().setFocusedTask(
+      restored.mode == FocusMode.focus && restored.isRunning
+          ? restored.task.id
+          : null,
+    );
     restored.addListener(_handleActiveFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _activeFocusProvider != restored) return;
@@ -219,7 +223,6 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
         activeProvider.isRunning) {
       return;
     }
-    context.read<TaskProvider>().setFocusedTask(task.id);
     final canResume = activeProvider != null &&
         activeProvider.task.id == task.id &&
         (activeProvider.isRunning || activeProvider.isPaused);
@@ -232,6 +235,12 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
       );
       _activeFocusProvider!.addListener(_handleActiveFocusChanged);
     }
+    final currentFocus = _activeFocusProvider!;
+    context.read<TaskProvider>().setFocusedTask(
+      currentFocus.mode == FocusMode.focus && currentFocus.isRunning
+          ? currentFocus.task.id
+          : null,
+    );
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -246,9 +255,14 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
 
   void _handleActiveFocusChanged() {
     final activeProvider = _activeFocusProvider;
-    if (!mounted || activeProvider == null || !activeProvider.isFinished) {
-      return;
-    }
+    if (!mounted || activeProvider == null) return;
+
+    context.read<TaskProvider>().setFocusedTask(
+      activeProvider.mode == FocusMode.focus && activeProvider.isRunning
+          ? activeProvider.task.id
+          : null,
+    );
+    if (!activeProvider.isFinished) return;
     if (ModalRoute.of(context)?.isCurrent != true) return;
 
     Navigator.of(context).push(
