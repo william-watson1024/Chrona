@@ -514,6 +514,82 @@ void main() {
     focusProvider.dispose();
   });
 
+  testWidgets('next focus round shows its task state when returning to today',
+      (tester) async {
+    resetFocusPreferences();
+    final taskProvider = TaskProvider.inMemory([
+      const Task(
+        id: 1,
+        title: '测试任务',
+        completed: false,
+        durationSeconds: 1,
+        createdAt: 1,
+      ),
+    ]);
+    final sessionProvider = FocusSessionProvider.inMemory();
+    final settingsProvider =
+        FocusSettingsProvider.inMemory(breakDurationSeconds: 1);
+
+    await tester.pumpWidget(
+      ChronaApp(
+        taskProvider: taskProvider,
+        focusSessionProvider: sessionProvider,
+        focusSettingsProvider: settingsProvider,
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1200)),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('本轮专注完成'), findsOneWidget);
+
+    final saveButton = find.text('保存').last;
+    await tester.scrollUntilVisible(
+      saveButton,
+      240,
+      scrollable: find.ancestor(
+        of: saveButton,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+    expect(find.text('休息中'), findsOneWidget);
+
+    final skipBreak = find.text('跳过休息');
+    await tester.scrollUntilVisible(
+      skipBreak,
+      240,
+      scrollable: find.ancestor(
+        of: skipBreak,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(skipBreak);
+    await tester.pumpAndSettle();
+    final startNextFocus = find.text('开始专注');
+    await tester.scrollUntilVisible(
+      startNextFocus,
+      240,
+      scrollable: find.ancestor(
+        of: startNextFocus,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(startNextFocus);
+    await tester.pumpAndSettle();
+    expect(taskProvider.focusedTaskId, 1);
+
+    await tester.tap(find.byTooltip('返回').first);
+    await tester.pumpAndSettle();
+    expect(find.text('正在专注'), findsOneWidget);
+    expect(taskProvider.focusedTaskId, 1);
+  });
+
   testWidgets('pause freezes time and resume rebuilds the end timestamp',
       (tester) async {
     var currentTime = DateTime(2026, 9, 27, 20, 0);

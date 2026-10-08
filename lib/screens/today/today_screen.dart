@@ -199,6 +199,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
         MaterialPageRoute(
           builder: (_) => FocusScreen(
             task: restored.task,
+            taskProvider: context.read<TaskProvider>(),
             durationSeconds: restored.plannedDurationSeconds,
             mode: restored.mode,
             focusProvider: restored,
@@ -295,6 +296,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
       MaterialPageRoute(
         builder: (_) => FocusScreen(
           task: task,
+          taskProvider: context.read<TaskProvider>(),
           durationSeconds: task.durationSeconds,
           focusProvider: _activeFocusProvider,
         ),
@@ -313,6 +315,7 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
       MaterialPageRoute(
         builder: (_) => FocusScreen(
           task: activeProvider.task,
+          taskProvider: context.read<TaskProvider>(),
           durationSeconds: activeProvider.plannedDurationSeconds,
           focusProvider: activeProvider,
         ),

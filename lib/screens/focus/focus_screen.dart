@@ -17,6 +17,7 @@ class FocusScreen extends StatefulWidget {
   const FocusScreen({
     super.key,
     required this.task,
+    this.taskProvider,
     this.durationSeconds = FocusTimerDurations.pomodoro,
     this.mode = FocusMode.focus,
     this.nextFocusDurationSeconds,
@@ -27,6 +28,7 @@ class FocusScreen extends StatefulWidget {
   });
 
   final Task task;
+  final TaskProvider? taskProvider;
   final int durationSeconds;
   final FocusMode mode;
   final int? nextFocusDurationSeconds;
@@ -104,7 +106,8 @@ class _FocusScreenState extends State<FocusScreen> {
   }
 
   void _applyFocusedTaskState() {
-    final taskProvider = Provider.of<TaskProvider?>(context, listen: false);
+    final taskProvider = widget.taskProvider ??
+        Provider.of<TaskProvider?>(context, listen: false);
     taskProvider?.setFocusedTask(
       _focusProvider.mode == FocusMode.focus && _focusProvider.isRunning
           ? _focusProvider.task.id
@@ -146,6 +149,7 @@ class _FocusScreenState extends State<FocusScreen> {
         builder: (_) => FocusNoteScreen(
           session: sessionResult,
           focusProvider: _focusProvider,
+          taskProvider: widget.taskProvider,
           disposeFocusProvider: disposeProviderOnSave,
           savedSession: savedSession,
         ),
@@ -160,6 +164,7 @@ class _FocusScreenState extends State<FocusScreen> {
       MaterialPageRoute(
         builder: (_) => FocusScreen(
           task: widget.task,
+          taskProvider: widget.taskProvider,
           durationSeconds: nextDuration,
           mode: FocusMode.focus,
         ),

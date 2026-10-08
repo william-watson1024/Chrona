@@ -18,12 +18,14 @@ class FocusNoteScreen extends StatefulWidget {
     super.key,
     required this.session,
     required this.focusProvider,
+    this.taskProvider,
     this.savedSession,
     this.disposeFocusProvider = false,
   });
 
   final FocusSessionResult session;
   final FocusProvider focusProvider;
+  final TaskProvider? taskProvider;
   final FocusSession? savedSession;
   final bool disposeFocusProvider;
 
@@ -64,6 +66,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
       MaterialPageRoute(
         builder: (_) => FocusScreen(
           task: widget.session.task,
+          taskProvider: widget.taskProvider,
           durationSeconds: widget.focusProvider.plannedDurationSeconds,
           focusProvider: widget.focusProvider,
           disposeFocusProvider: true,
@@ -106,7 +109,8 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
     });
 
     final updatedTask = widget.session.task.copyWith(title: taskTitle);
-    final taskProvider = Provider.of<TaskProvider?>(context, listen: false);
+    final taskProvider = widget.taskProvider ??
+        Provider.of<TaskProvider?>(context, listen: false);
     final settingsProvider =
         Provider.of<FocusSettingsProvider?>(context, listen: false);
 
@@ -156,6 +160,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
           MaterialPageRoute(
             builder: (_) => FocusScreen(
               task: updatedTask,
+              taskProvider: widget.taskProvider,
               durationSeconds: breakDuration,
               mode: FocusMode.rest,
               nextFocusDurationSeconds: nextFocusDuration,
