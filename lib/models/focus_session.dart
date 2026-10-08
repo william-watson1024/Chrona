@@ -121,6 +121,26 @@ class FocusSession {
       createdAt: createdAt,
     );
   }
+
+  FocusSession copyWithRoundDetails({
+    required DateTime endedAt,
+    required int plannedDurationSeconds,
+    required int actualDurationSeconds,
+    required FocusSessionStatus status,
+  }) {
+    return FocusSession(
+      id: id,
+      taskId: taskId,
+      taskTitleSnapshot: taskTitleSnapshot,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      plannedDurationSeconds: plannedDurationSeconds,
+      actualDurationSeconds: actualDurationSeconds,
+      note: note,
+      status: status,
+      createdAt: createdAt,
+    );
+  }
 }
 
 int? _readInt(Object? value) {

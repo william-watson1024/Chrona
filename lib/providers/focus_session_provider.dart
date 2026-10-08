@@ -130,7 +130,7 @@ class FocusSessionProvider extends ChangeNotifier {
       );
     }
     if (existing != null) {
-      final existingSession = existing!;
+      final existingSession = existing;
       if (!_sessions.any((item) => item.id == existingSession.id)) {
         _sessions.add(existingSession);
         _sortSessions();
@@ -139,6 +139,45 @@ class FocusSessionProvider extends ChangeNotifier {
       return existingSession;
     }
     return saveSession(session);
+  }
+
+  Future<FocusSession?> saveOrUpdateRound(FocusSession session) async {
+    await loadSessions();
+    FocusSession? existing;
+    for (final item in _sessions) {
+      if (item.taskId == session.taskId &&
+          item.startedAt.isAtSameMomentAs(session.startedAt)) {
+        existing = item;
+        break;
+      }
+    }
+    existing ??= _isInMemory
+        ? null
+        : await _database.findFocusSessionForRound(
+            taskId: session.taskId,
+            startedAt: session.startedAt,
+          );
+
+    if (existing == null) {
+      return saveSessionIfAbsent(session);
+    }
+
+    final updated = existing.copyWithRoundDetails(
+      endedAt: session.endedAt,
+      plannedDurationSeconds: session.plannedDurationSeconds,
+      actualDurationSeconds: session.actualDurationSeconds,
+      status: session.status,
+    );
+    if (!_isInMemory) await _database.updateFocusSessionRound(updated);
+    final index = _sessions.indexWhere((item) => item.id == existing!.id);
+    if (index >= 0) {
+      _sessions[index] = updated;
+    } else {
+      _sessions.add(updated);
+    }
+    _sortSessions();
+    notifyListeners();
+    return updated;
   }
 
   String _sessionKey(FocusSession session) =>

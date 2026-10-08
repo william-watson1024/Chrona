@@ -159,7 +159,7 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   final Task task;
-  final int plannedDurationSeconds;
+  int plannedDurationSeconds;
   final FocusMode mode;
   final DateTime Function() _now;
   final bool _persistenceEnabled;
@@ -195,8 +195,8 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   int get actualDurationSeconds {
     final start = startedAt;
-    final end = endedAt;
-    if (start == null || end == null) return 0;
+    final end = endedAt ?? _now();
+    if (start == null) return 0;
     var pausedMilliseconds = _totalPausedMilliseconds;
     final pauseStartedAt = pausedAt;
     if (pauseStartedAt != null) {
@@ -337,6 +337,32 @@ class FocusProvider extends ChangeNotifier with WidgetsBindingObserver {
     _ticker = null;
     _clearPersistedState();
     unawaited(NotificationService.instance.cancelFocusEnd());
+    notifyListeners();
+  }
+
+  /// Adds another focus segment to the current round after its record screen.
+  /// The time spent on the record screen is excluded from the session total.
+  void extendFocus(int additionalSeconds) {
+    if (isBreak ||
+        status != FocusTimerStatus.finished ||
+        additionalSeconds <= 0 ||
+        endedAt == null) {
+      return;
+    }
+
+    _totalPausedMilliseconds += _now().difference(endedAt!).inMilliseconds;
+    plannedDurationSeconds += additionalSeconds;
+    startedAt ??= _now();
+    endedAt = null;
+    pausedAt = null;
+    pausedRemainingSeconds = null;
+    _pausedRemainingMilliseconds = null;
+    remainingSeconds = additionalSeconds;
+    endsAt = _now().add(Duration(seconds: additionalSeconds));
+    status = FocusTimerStatus.running;
+    _startTicker();
+    _persistActiveState();
+    _scheduleNotification();
     notifyListeners();
   }
 

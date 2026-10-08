@@ -7,6 +7,8 @@ import '../../models/focus_session.dart';
 import '../../models/task.dart';
 import '../../providers/focus_provider.dart';
 import '../../providers/focus_session_provider.dart';
+import '../../providers/focus_settings_provider.dart';
+import '../../providers/task_provider.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
@@ -21,6 +23,8 @@ class FocusScreen extends StatefulWidget {
     this.nextFocusDurationSeconds,
     this.now,
     this.focusProvider,
+    this.disposeFocusProvider = false,
+    this.savedSession,
   });
 
   final Task task;
@@ -29,6 +33,8 @@ class FocusScreen extends StatefulWidget {
   final int? nextFocusDurationSeconds;
   final DateTime Function()? now;
   final FocusProvider? focusProvider;
+  final bool disposeFocusProvider;
+  final FocusSession? savedSession;
 
   @override
   State<FocusScreen> createState() => _FocusScreenState();
@@ -36,13 +42,15 @@ class FocusScreen extends StatefulWidget {
 
 class _FocusScreenState extends State<FocusScreen> {
   late final FocusProvider _focusProvider;
-  late final bool _ownsFocusProvider;
+  late bool _ownsFocusProvider;
   bool _hasOpenedNote = false;
+  bool _taskStateSyncScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    _ownsFocusProvider = widget.focusProvider == null;
+    _ownsFocusProvider =
+        widget.focusProvider == null || widget.disposeFocusProvider;
     _focusProvider = widget.focusProvider ??
         FocusProvider(
           task: widget.task,
@@ -60,6 +68,7 @@ class _FocusScreenState extends State<FocusScreen> {
         if (mounted) _handleFocusChanged();
       });
     }
+    _syncFocusedTaskState();
   }
 
   @override
@@ -70,6 +79,7 @@ class _FocusScreenState extends State<FocusScreen> {
   }
 
   void _handleFocusChanged() {
+    _syncFocusedTaskState();
     final status = _focusProvider.status;
     if (widget.mode == FocusMode.rest ||
         _hasOpenedNote ||
@@ -84,15 +94,34 @@ class _FocusScreenState extends State<FocusScreen> {
     });
   }
 
+  void _syncFocusedTaskState() {
+    if (_taskStateSyncScheduled) return;
+    _taskStateSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _taskStateSyncScheduled = false;
+      if (!mounted) return;
+      _applyFocusedTaskState();
+    });
+  }
+
+  void _applyFocusedTaskState() {
+    final taskProvider = Provider.of<TaskProvider?>(context, listen: false);
+    taskProvider?.setFocusedTask(
+      _focusProvider.mode == FocusMode.focus && _focusProvider.isRunning
+          ? _focusProvider.task.id
+          : null,
+    );
+  }
+
   Future<void> _openFocusNote() async {
     final sessionResult = _focusProvider.sessionResult;
-    FocusSession? savedSession;
+    FocusSession? savedSession = widget.savedSession;
     if (sessionResult.status == FocusTimerStatus.finished) {
       final sessionProvider =
           Provider.of<FocusSessionProvider?>(context, listen: false);
       if (sessionProvider != null) {
         try {
-          savedSession = await sessionProvider.saveSessionIfAbsent(
+          savedSession = await sessionProvider.saveOrUpdateRound(
             FocusSession(
               taskId: sessionResult.task.id,
               taskTitleSnapshot: sessionResult.task.title,
@@ -100,25 +129,25 @@ class _FocusScreenState extends State<FocusScreen> {
               endedAt: sessionResult.endedAt,
               plannedDurationSeconds: sessionResult.plannedDurationSeconds,
               actualDurationSeconds: sessionResult.actualDurationSeconds,
-              note: null,
+              note: savedSession?.note,
               status: FocusSessionStatus.completed,
-              createdAt: sessionResult.endedAt,
+              createdAt: savedSession?.createdAt ?? sessionResult.endedAt,
             ),
           );
-          if (savedSession != null) {
-            await FocusProvider.clearPersistedState();
-          }
         } catch (_) {
           // Keep the note page available so the user can retry saving there.
         }
       }
     }
-
+    final disposeProviderOnSave = _ownsFocusProvider;
+    _ownsFocusProvider = false;
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => FocusNoteScreen(
           session: sessionResult,
+          focusProvider: _focusProvider,
+          disposeFocusProvider: disposeProviderOnSave,
           savedSession: savedSession,
         ),
       ),
@@ -193,7 +222,7 @@ class _FocusScreenState extends State<FocusScreen> {
                           ),
                           const SizedBox(height: 48),
                           Text(
-                            isBreak ? '休息一下' : provider.task.title,
+                            isBreak ? '休息中' : provider.task.title,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Color(0xFF111111),
@@ -228,17 +257,6 @@ class _FocusScreenState extends State<FocusScreen> {
                               ],
                             ),
                           const SizedBox(height: 64),
-                          if (isBreak) ...[
-                            const Text(
-                              '短休息',
-                              style: TextStyle(
-                                color: Color(0xFF858585),
-                                fontSize: 20,
-                                height: 1.1,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: provider.toggleTimerDisplay,
@@ -248,6 +266,11 @@ class _FocusScreenState extends State<FocusScreen> {
                               plannedDurationSeconds:
                                   provider.plannedDurationSeconds,
                               status: provider.status,
+                              isBreak: isBreak,
+                              isLongBreak: isBreak &&
+                                  provider.plannedDurationSeconds >
+                                      FocusSettingsProvider
+                                          .defaultBreakDurationSeconds,
                             ),
                           ),
                           const SizedBox(height: 58),
@@ -323,9 +346,7 @@ class _FocusScreenState extends State<FocusScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                isBreak
-                                    ? '休息结束后按设置方式提醒'
-                                    : '时间结束后按设置方式提醒',
+                                isBreak ? '休息结束后按设置方式提醒' : '时间结束后按设置方式提醒',
                                 style: const TextStyle(
                                   color: Color(0xFF8B8B8B),
                                   fontSize: 17,
@@ -388,24 +409,30 @@ class _FocusProgress extends StatelessWidget {
     required this.displaySeconds,
     required this.plannedDurationSeconds,
     required this.status,
+    required this.isBreak,
+    required this.isLongBreak,
   });
 
   final int remainingSeconds;
   final int displaySeconds;
   final int plannedDurationSeconds;
   final FocusTimerStatus status;
+  final bool isBreak;
+  final bool isLongBreak;
 
   @override
   Widget build(BuildContext context) {
     final progress = plannedDurationSeconds == 0
         ? 1.0
         : (1 - remainingSeconds / plannedDurationSeconds).clamp(0.0, 1.0);
-    final statusLabel = switch (status) {
-      FocusTimerStatus.paused => '已暂停',
-      FocusTimerStatus.finished => '已完成',
-      FocusTimerStatus.cancelled => '已结束',
-      _ => '专注中',
-    };
+    final statusLabel = isBreak
+        ? (isLongBreak ? '长休息' : '短休息')
+        : switch (status) {
+            FocusTimerStatus.paused => '已暂停',
+            FocusTimerStatus.finished => '已完成',
+            FocusTimerStatus.cancelled => '已结束',
+            _ => '专注中',
+          };
 
     return SizedBox(
       width: 306,

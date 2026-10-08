@@ -187,10 +187,10 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
 
     _activeFocusProvider = restored;
     context.read<TaskProvider>().setFocusedTask(
-      restored.mode == FocusMode.focus && restored.isRunning
-          ? restored.task.id
-          : null,
-    );
+          restored.mode == FocusMode.focus && restored.isRunning
+              ? restored.task.id
+              : null,
+        );
     restored.addListener(_handleActiveFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _activeFocusProvider != restored) return;
@@ -209,7 +209,14 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
   }
 
   void _openFocus(Task task) {
+    unawaited(_openFocusAsync(task));
+  }
+
+  Future<void> _openFocusAsync(Task task) async {
     var activeProvider = _activeFocusProvider;
+    var shouldRestorePersistedFocus = activeProvider != null &&
+        !activeProvider.isRunning &&
+        !activeProvider.isPaused;
     if (activeProvider != null &&
         activeProvider.task.id != task.id &&
         activeProvider.isPaused) {
@@ -223,6 +230,48 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
         activeProvider.isRunning) {
       return;
     }
+
+    if (activeProvider != null &&
+        !activeProvider.isRunning &&
+        !activeProvider.isPaused) {
+      activeProvider.removeListener(_handleActiveFocusChanged);
+      activeProvider.dispose();
+      _activeFocusProvider = null;
+      activeProvider = null;
+    }
+
+    if (activeProvider == null && shouldRestorePersistedFocus) {
+      final restored = await FocusProvider.restore();
+      if (!mounted) {
+        restored?.dispose();
+        return;
+      }
+      if (restored != null && (restored.isRunning || restored.isPaused)) {
+        _activeFocusProvider = restored;
+        restored.addListener(_handleActiveFocusChanged);
+        activeProvider = restored;
+        if (restored.task.id != task.id && restored.isRunning) return;
+      } else {
+        restored?.dispose();
+      }
+      shouldRestorePersistedFocus = false;
+    }
+
+    if (activeProvider != null &&
+        activeProvider.task.id != task.id &&
+        activeProvider.isPaused) {
+      activeProvider.removeListener(_handleActiveFocusChanged);
+      activeProvider.discardPaused();
+      activeProvider.dispose();
+      _activeFocusProvider = null;
+      activeProvider = null;
+    }
+    if (activeProvider != null &&
+        activeProvider.task.id != task.id &&
+        activeProvider.isRunning) {
+      return;
+    }
+
     final canResume = activeProvider != null &&
         activeProvider.task.id == task.id &&
         (activeProvider.isRunning || activeProvider.isPaused);
@@ -237,10 +286,10 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     }
     final currentFocus = _activeFocusProvider!;
     context.read<TaskProvider>().setFocusedTask(
-      currentFocus.mode == FocusMode.focus && currentFocus.isRunning
-          ? currentFocus.task.id
-          : null,
-    );
+          currentFocus.mode == FocusMode.focus && currentFocus.isRunning
+              ? currentFocus.task.id
+              : null,
+        );
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -257,11 +306,14 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     final activeProvider = _activeFocusProvider;
     if (!mounted || activeProvider == null) return;
 
-    context.read<TaskProvider>().setFocusedTask(
-      activeProvider.mode == FocusMode.focus && activeProvider.isRunning
-          ? activeProvider.task.id
-          : null,
-    );
+    final focusedTaskId =
+        activeProvider.mode == FocusMode.focus && activeProvider.isRunning
+            ? activeProvider.task.id
+            : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(_activeFocusProvider, activeProvider)) return;
+      context.read<TaskProvider>().setFocusedTask(focusedTaskId);
+    });
     if (!activeProvider.isFinished) return;
     if (ModalRoute.of(context)?.isCurrent != true) return;
 
@@ -1491,8 +1543,8 @@ class _TaskRowState extends State<_TaskRow>
         constraints: const BoxConstraints(minHeight: 94),
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: const BoxDecoration(
-            border: Border(
-                bottom: BorderSide(color: Color(0xFFE9E9E9), width: 1))),
+            border:
+                Border(bottom: BorderSide(color: Color(0xFFE9E9E9), width: 1))),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1546,8 +1598,7 @@ class _TaskRowState extends State<_TaskRow>
               color: const Color(0xFF8A8A8A),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
-              constraints:
-                  const BoxConstraints.tightFor(width: 32, height: 32),
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
               tooltip: '删除任务',
             ),
             _StartButton(

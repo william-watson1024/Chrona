@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -16,11 +18,15 @@ class FocusNoteScreen extends StatefulWidget {
   const FocusNoteScreen({
     super.key,
     required this.session,
+    required this.focusProvider,
     this.savedSession,
+    this.disposeFocusProvider = false,
   });
 
   final FocusSessionResult session;
+  final FocusProvider focusProvider;
   final FocusSession? savedSession;
+  final bool disposeFocusProvider;
 
   @override
   State<FocusNoteScreen> createState() => _FocusNoteScreenState();
@@ -36,6 +42,36 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
 
   void _returnFromNote() {
     Navigator.of(context).pop();
+  }
+
+  Future<void> _chooseExtension() async {
+    final seconds = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('延长专注'),
+        children: [
+          for (final minutes in [5, 10, 20])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(minutes * 60),
+              child: Text('延长 $minutes 分钟'),
+            ),
+        ],
+      ),
+    );
+    if (seconds == null || !mounted) return;
+
+    widget.focusProvider.extendFocus(seconds);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => FocusScreen(
+          task: widget.session.task,
+          durationSeconds: widget.focusProvider.plannedDurationSeconds,
+          focusProvider: widget.focusProvider,
+          disposeFocusProvider: true,
+          savedSession: widget.savedSession,
+        ),
+      ),
+    );
   }
 
   @override
@@ -107,10 +143,11 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
         });
         return;
       }
-      await FocusProvider.clearPersistedState();
+      unawaited(FocusProvider.clearPersistedState());
       if (taskProvider != null) {
         await taskProvider.updateTask(updatedTask);
       }
+      if (widget.disposeFocusProvider) widget.focusProvider.dispose();
       if (!mounted) return;
       if (widget.session.status == FocusTimerStatus.finished) {
         final breakDuration = settingsProvider?.breakDurationSeconds ??
@@ -230,6 +267,19 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                         ),
                       ),
                     ),
+                    if (widget.session.status == FocusTimerStatus.finished) ...[
+                      const SizedBox(height: 18),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _chooseExtension,
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF111111),
+                          ),
+                          icon: const Icon(Icons.add_alarm_outlined),
+                          label: const Text('延长专注'),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 38),
                     TextButton(
                       onPressed: () =>
