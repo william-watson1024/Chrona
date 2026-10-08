@@ -306,14 +306,6 @@ class _TodayScreenContentState extends State<_TodayScreenContent>
     final activeProvider = _activeFocusProvider;
     if (!mounted || activeProvider == null) return;
 
-    final focusedTaskId =
-        activeProvider.mode == FocusMode.focus && activeProvider.isRunning
-            ? activeProvider.task.id
-            : null;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_activeFocusProvider, activeProvider)) return;
-      context.read<TaskProvider>().setFocusedTask(focusedTaskId);
-    });
     if (!activeProvider.isFinished) return;
     if (ModalRoute.of(context)?.isCurrent != true) return;
 

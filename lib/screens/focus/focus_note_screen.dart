@@ -8,7 +8,6 @@ import '../../providers/focus_provider.dart';
 import '../../providers/focus_settings_provider.dart';
 import '../../providers/focus_session_provider.dart';
 import '../../providers/task_provider.dart';
-import '../../services/notification_service.dart';
 import '../../utils/focus_formatters.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
@@ -188,28 +187,28 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+                padding: const EdgeInsets.fromLTRB(24, 10, 24, 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _NoteTopBar(onBack: _returnFromNote),
-                    const SizedBox(height: 72),
+                    const SizedBox(height: 24),
                     Text(
                       widget.session.status == FocusTimerStatus.cancelled
                           ? '本轮专注结束'
                           : '本轮专注完成',
                       style: const TextStyle(
                           color: Color(0xFF111111),
-                          fontSize: 34,
+                          fontSize: 30,
                           height: 1.1,
                           fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 43),
+                    const SizedBox(height: 18),
                     TextField(
                       controller: _taskTitleController,
                       style: const TextStyle(
                           color: Color(0xFF111111),
-                          fontSize: 30,
+                          fontSize: 26,
                           height: 1.15,
                           fontWeight: FontWeight.w500),
                       decoration: const InputDecoration(
@@ -218,13 +217,13 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                         border: InputBorder.none,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
                     Text(
                       '${formatFocusTime(widget.session.startedAt)} - '
                       '${formatFocusTime(widget.session.endedAt)} · '
                       '${formatFocusDuration(widget.session.actualDurationSeconds)}',
                       style: const TextStyle(
-                          color: Color(0xFF8B8B8B), fontSize: 20, height: 1.1),
+                          color: Color(0xFF8B8B8B), fontSize: 16, height: 1.1),
                     ),
                     if (widget.session.status ==
                         FocusTimerStatus.cancelled) ...[
@@ -237,24 +236,24 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                             height: 1.1),
                       ),
                     ],
-                    const SizedBox(height: 79),
+                    const SizedBox(height: 28),
                     const Text(
                       '这段时间做了什么？',
                       style: TextStyle(
-                          color: Color(0xFF111111), fontSize: 22, height: 1.2),
+                          color: Color(0xFF111111), fontSize: 19, height: 1.2),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 10),
                     TextField(
                       controller: _noteController,
-                      minLines: 8,
-                      maxLines: 12,
+                      minLines: 4,
+                      maxLines: 4,
                       textAlignVertical: TextAlignVertical.top,
                       style: const TextStyle(
-                          color: Color(0xFF888888), fontSize: 20, height: 1.45),
+                          color: Color(0xFF888888), fontSize: 16, height: 1.35),
                       decoration: InputDecoration(
                         filled: false,
                         contentPadding:
-                            const EdgeInsets.fromLTRB(36, 29, 24, 24),
+                            const EdgeInsets.fromLTRB(18, 13, 16, 12),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide:
@@ -268,29 +267,57 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                       ),
                     ),
                     if (widget.session.status == FocusTimerStatus.finished) ...[
-                      const SizedBox(height: 18),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: _chooseExtension,
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF111111),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: _chooseExtension,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF111111),
+                              side: const BorderSide(color: Color(0xFFE0E0E0)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              minimumSize: const Size(124, 56),
+                            ),
+                            child: const Text('延长专注'),
                           ),
-                          icon: const Icon(Icons.add_alarm_outlined),
-                          label: const Text('延长专注'),
-                        ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 56,
+                              child: FilledButton(
+                                onPressed: _isSaving ? () {} : _saveSession,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF111111),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                child: const Text('保存'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      PrimaryButton(
+                        label: '保存',
+                        onPressed: _isSaving ? () {} : _saveSession,
                       ),
                     ],
-                    const SizedBox(height: 38),
-                    TextButton(
-                      onPressed: () =>
-                          NotificationService.instance.cancelFocusEnd(),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF111111),
-                      ),
-                      child: const Text('停止提醒'),
-                    ),
-                    const SizedBox(height: 12),
                     if (_saveError != null) ...[
+                      const SizedBox(height: 10),
                       Text(
                         _saveError!,
                         style: const TextStyle(
@@ -298,12 +325,7 @@ class _FocusNoteScreenState extends State<FocusNoteScreen> {
                           fontSize: 14,
                         ),
                       ),
-                      const SizedBox(height: 12),
                     ],
-                    PrimaryButton(
-                      label: '保存',
-                      onPressed: _isSaving ? () {} : _saveSession,
-                    ),
                   ],
                 ),
               ),

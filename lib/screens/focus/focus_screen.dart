@@ -9,7 +9,6 @@ import '../../providers/focus_provider.dart';
 import '../../providers/focus_session_provider.dart';
 import '../../providers/focus_settings_provider.dart';
 import '../../providers/task_provider.dart';
-import '../../services/notification_service.dart';
 import '../../widgets/chrona_widgets.dart';
 import '../history/history_screen.dart';
 import 'focus_note_screen.dart';
@@ -311,16 +310,6 @@ class _FocusScreenState extends State<FocusScreen> {
                               ),
                               child: const Text('跳过休息'),
                             ),
-                          if (!isBreak &&
-                              provider.status == FocusTimerStatus.finished)
-                            TextButton(
-                              onPressed: () =>
-                                  NotificationService.instance.cancelFocusEnd(),
-                              child: const Text('停止提醒'),
-                            ),
-                          if (!isBreak &&
-                              provider.status == FocusTimerStatus.finished)
-                            const SizedBox(height: 8),
                           if (!isBreak)
                             TextButton(
                               onPressed: _confirmEnd,
